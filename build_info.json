@@ -1,0 +1,48 @@
+{
+  "id": "0ea4b108-cc2e-46be-9193-701b62a50150",
+  "status": "ERRORED",
+  "platform": "ANDROID",
+  "error": {
+    "errorCode": "EAS_BUILD_UNKNOWN_GRADLE_ERROR",
+    "message": "Gradle build failed with unknown error. See logs for the \"Run gradlew\" phase for more information."
+  },
+  "artifacts": {},
+  "fingerprint": {
+    "id": "019e0bf0-672c-7e3f-9f44-36c6b67a88c4",
+    "hash": "7fe31605e551a42194058040c353684ef3ebad19"
+  },
+  "initiatingActor": {
+    "id": "4e8c7455-ba94-4b3c-99cc-2f145606a71d",
+    "displayName": "axelnn51"
+  },
+  "logFiles": [
+    "https://storage.googleapis.com/eas-workflows-production/logs/44fc55a5-cf96-4905-9e8e-c030d393ac41/0ea4b108-cc2e-46be-9193-701b62a50150/2026-05-09T08%3A52%3A48Z-a79d5eea-b78f-4fa0-ad6a-8db95282770d.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260509%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260509T085439Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=9165526dd8309a8be1b420d01687b56a9a5b06a59343ad87f4b788111eb4bbfd890707b4317eac6ebc0478bbee3a4396ad3223bf71841a916285a0f31eee0db9b8723fa19a04b7a2f1e7e6a3b7da14ab9e16c288f9a59bf864be73611a954b949123e64fef142230c2e3ac1876ca20a4e4f2c3deff2fea196d7c84a7634009eb79e7f621a0f632f4c840973808d37e8907bdba8a2603f7d18065f7bdb75f44051cf716e2e0ec5086f6bb5aa8e5ce81d13ec82d41aa16c5988463e92e03a6bc85a00a631205a728a935edd3f8c16925d8e08c5ebd6915a8eca714f18ad1e851529633c63d6f4198ac0d10c203067d5f0404aac96fec341638658126892111db0e"
+  ],
+  "project": {
+    "id": "44fc55a5-cf96-4905-9e8e-c030d393ac41",
+    "name": "yape-dashboard",
+    "slug": "yape-dashboard",
+    "ownerAccount": {
+      "id": "cc150efe-bc63-4077-a593-0b5f8bf8a4cd",
+      "name": "axelnn51"
+    }
+  },
+  "distribution": "INTERNAL",
+  "buildProfile": "preview",
+  "sdkVersion": "52.0.0",
+  "appVersion": "1.0.0",
+  "appBuildVersion": "1",
+  "gitCommitHash": "44aa3261049a4914afec23bb9882d767ee38afa7",
+  "gitCommitMessage": "Fix: LMFWC API auth (query params), OCR amount fallback by code match, Culqi update status msg",
+  "priority": "NORMAL",
+  "createdAt": "2026-05-09T08:52:44.933Z",
+  "updatedAt": "2026-05-09T08:56:18.851Z",
+  "completedAt": "2026-05-09T08:56:18.687Z",
+  "expirationDate": "2026-05-23T08:52:44.964Z",
+  "isForIosSimulator": false,
+  "metrics": {
+    "buildWaitTime": 3110,
+    "buildQueueTime": 4863,
+    "buildDuration": 205781
+  }
+}

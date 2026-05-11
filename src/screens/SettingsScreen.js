@@ -155,7 +155,12 @@ export default function SettingsScreen({ navigation }) {
     setSaving(true);
     try {
       await saveConfig(serverUrl.trim(), apiKey.trim());
-      Alert.alert('✅', 'Configuración guardada');
+      try {
+        await api.registerPushToken();
+      } catch (e) {
+        console.warn('Error al registrar push token:', e);
+      }
+      Alert.alert('✅', 'Configuración guardada y Push Token registrado');
     } catch (e) { Alert.alert('Error', e.message); }
     finally { setSaving(false); }
   };
@@ -166,6 +171,9 @@ export default function SettingsScreen({ navigation }) {
     try {
       await saveConfig(serverUrl.trim(), apiKey.trim());
       const result = await api.testConnection();
+      if (result.ok) {
+        api.registerPushToken().catch(e => console.warn(e));
+      }
       setTestResult(result);
     } catch (e) { setTestResult({ ok: false, error: e.message }); }
     finally { setTesting(false); }

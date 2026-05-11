@@ -17,6 +17,7 @@ const { width } = Dimensions.get('window');
 
 export default function DashboardScreen({ navigation }) {
   const [data, setData] = useState(null);
+  const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
@@ -32,6 +33,10 @@ export default function DashboardScreen({ navigation }) {
       setError(null);
       const result = await api.getDashboard();
       setData(result.data);
+      try {
+        const notifs = await api.getNotifications(5);
+        if (notifs.ok) setNotifications(notifs.data);
+      } catch (err) { /* ignore */ }
     } catch (e) {
       setError(e.message);
     } finally {
@@ -169,7 +174,6 @@ export default function DashboardScreen({ navigation }) {
         Última actualización: {data?.timestamp || '-'}
       </Text>
 
-      {/* Quick Actions */}
       <Text style={styles.sectionTitle}>Acciones rápidas</Text>
       <View style={styles.actionsRow}>
         <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('Pedidos')}>
@@ -184,6 +188,31 @@ export default function DashboardScreen({ navigation }) {
             <Text style={styles.actionLabel}>Reportes</Text>
           </LinearGradient>
         </TouchableOpacity>
+      </View>
+
+      {/* Yape Reads (Notifications) */}
+      <Text style={[styles.sectionTitle, { marginTop: Spacing.xl }]}>Últimas Lecturas Yape</Text>
+      <View style={styles.readsContainer}>
+        {notifications.length === 0 ? (
+          <Text style={styles.emptyReads}>No hay lecturas recientes</Text>
+        ) : (
+          notifications.map((notif, index) => (
+            <View key={notif.id || index} style={styles.readCard}>
+              <View style={styles.readIcon}>
+                <Ionicons name="notifications" size={18} color={Colors.primaryLight} />
+              </View>
+              <View style={styles.readContent}>
+                <Text style={styles.readSender}>{notif.sender || 'Yape'}</Text>
+                <Text style={styles.readDate}>
+                  {notif.created_at ? new Date(notif.created_at).toLocaleString('es-PE', { timeZone: 'America/Lima', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : 'Reciente'}
+                </Text>
+              </View>
+              <Text style={styles.readAmount}>
+                S/ {notif.amount ? notif.amount.toFixed(2) : '0.00'}
+              </Text>
+            </View>
+          ))
+        )}
       </View>
     </ScrollView>
   );
@@ -313,5 +342,52 @@ const styles = StyleSheet.create({
     width: 1,
     height: 35,
     backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  readsContainer: {
+    backgroundColor: Colors.bgCard,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  emptyReads: {
+    color: Colors.textMuted,
+    fontSize: FontSize.sm,
+    textAlign: 'center',
+    paddingVertical: Spacing.md,
+  },
+  readCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border + '50',
+  },
+  readIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(124, 58, 237, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: Spacing.sm,
+  },
+  readContent: {
+    flex: 1,
+  },
+  readSender: {
+    color: Colors.text,
+    fontSize: FontSize.sm,
+    fontWeight: '600',
+  },
+  readDate: {
+    color: Colors.textMuted,
+    fontSize: FontSize.xs,
+    marginTop: 2,
+  },
+  readAmount: {
+    color: Colors.success,
+    fontSize: FontSize.md,
+    fontWeight: '700',
   },
 });

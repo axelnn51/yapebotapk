@@ -157,10 +157,10 @@ export default function SettingsScreen({ navigation }) {
       await saveConfig(serverUrl.trim(), apiKey.trim());
       try {
         await api.registerPushToken();
+        Alert.alert('✅', 'Configuración guardada y Push Token registrado');
       } catch (e) {
-        console.warn('Error al registrar push token:', e);
+        Alert.alert('⚠️ Configuración Guardada', `Pero ocurrió un error con las notificaciones: ${e.message}`);
       }
-      Alert.alert('✅', 'Configuración guardada y Push Token registrado');
     } catch (e) { Alert.alert('Error', e.message); }
     finally { setSaving(false); }
   };

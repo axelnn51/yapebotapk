@@ -107,7 +107,9 @@ export const api = {
       const { status } = await Notifications.requestPermissionsAsync();
       finalStatus = status;
     }
-    if (finalStatus !== 'granted') return;
+    if (finalStatus !== 'granted') {
+      throw new Error('Permisos de notificación denegados por el usuario.');
+    }
 
     if (Platform.OS === 'android') {
       Notifications.setNotificationChannelAsync('default', {
@@ -125,6 +127,7 @@ export const api = {
       return token;
     } catch (e) {
       console.warn('Error registerPushToken:', e);
+      throw new Error(`Fallo al generar Push Token: ${e.message}`);
     }
   },
   testPushNotification: () => apiRequest('/test-push', 'POST'),

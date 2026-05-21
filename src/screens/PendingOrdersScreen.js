@@ -4,7 +4,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  RefreshControl, ActivityIndicator, Alert, ScrollView,
+  RefreshControl, ActivityIndicator, Alert, ScrollView, TextInput,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,6 +32,7 @@ export default function PendingOrdersScreen({ navigation }) {
   const [processingId, setProcessingId] = useState(null);
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchOrders = useCallback(async (isBackground = false) => {
     try {
@@ -159,10 +160,10 @@ export default function PendingOrdersScreen({ navigation }) {
             )}
           </View>
           <View style={{ alignItems: 'flex-end' }}>
-            {item.override_price ? (
+            {(item.override_price || (item.is_officetech && item.suggested_price)) ? (
               <>
                 <Text style={{ color: Colors.textMuted, fontSize: FontSize.sm, textDecorationLine: 'line-through' }}>S/ {item.total}</Text>
-                <Text style={[styles.orderAmount, { color: Colors.success }]}>S/ {item.override_price.toFixed(2)}</Text>
+                <Text style={[styles.orderAmount, { color: Colors.success }]}>S/ {parseFloat(item.override_price || item.suggested_price).toFixed(2)}</Text>
               </>
             ) : (
               <Text style={styles.orderAmount}>S/ {item.total}</Text>
@@ -243,10 +244,18 @@ export default function PendingOrdersScreen({ navigation }) {
       </View>
 
       <FlatList
-        data={orders}
+        data={searchQuery.trim() ? orders.filter(o => {
+          const q = searchQuery.toLowerCase();
+          const name = `${o.customer.first_name} ${o.customer.last_name}`.toLowerCase();
+          return o.id.toString().includes(q) || name.includes(q) || (o.products || '').toLowerCase().includes(q);
+        }) : orders}
         keyExtractor={(item) => item.id.toString()}
         renderItem={renderOrder}
         contentContainerStyle={[styles.list, orders.length === 0 && styles.emptyList]}
+        maxToRenderPerBatch={10}
+        windowSize={5}
+        removeClippedSubviews={true}
+        initialNumToRender={8}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -264,9 +273,28 @@ export default function PendingOrdersScreen({ navigation }) {
           </View>
         }
         ListHeaderComponent={
-          orders.length > 0 ? (
-            <Text style={styles.headerCount}>{orders.length} pedido{orders.length !== 1 ? 's' : ''}</Text>
-          ) : null
+          <>
+            {/* Search Bar */}
+            <View style={styles.searchContainer}>
+              <Ionicons name="search" size={18} color={Colors.textMuted} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Buscar por #, cliente o producto..."
+                placeholderTextColor={Colors.textMuted}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoCorrect={false}
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchQuery('')}>
+                  <Ionicons name="close-circle" size={18} color={Colors.textMuted} />
+                </TouchableOpacity>
+              )}
+            </View>
+            {orders.length > 0 ? (
+              <Text style={styles.headerCount}>{orders.length} pedido{orders.length !== 1 ? 's' : ''}</Text>
+            ) : null}
+          </>
         }
       />
     </View>
@@ -348,5 +376,23 @@ const styles = StyleSheet.create({
   },
   filterTextActive: {
     color: '#fff',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.bgCard,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    gap: Spacing.sm,
+  },
+  searchInput: {
+    flex: 1,
+    color: Colors.text,
+    fontSize: FontSize.sm,
+    padding: 0,
   },
 });

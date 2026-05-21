@@ -2,10 +2,10 @@
 // Dashboard Screen — KPIs principales y estado del servidor
 // v3: Datos reales de ayer y semana (no demo)
 // ============================================================
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, RefreshControl,
-  TouchableOpacity, ActivityIndicator, Dimensions,
+  TouchableOpacity, ActivityIndicator, Dimensions, Animated,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +21,18 @@ export default function DashboardScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
+  const [serverOnline, setServerOnline] = useState(true);
+
+  // Skeleton animation
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmerAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
+        Animated.timing(shimmerAnim, { toValue: 0, duration: 1000, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
 
   const fetchData = useCallback(async (isBackground = false) => {
     try {
@@ -33,12 +45,14 @@ export default function DashboardScreen({ navigation }) {
       setError(null);
       const result = await api.getDashboard();
       setData(result.data);
+      setServerOnline(true);
       try {
         const notifs = await api.getNotifications(5);
         if (notifs.ok) setNotifications(notifs.data);
       } catch (err) { /* ignore */ }
     } catch (e) {
       setError(e.message);
+      setServerOnline(false);
     } finally {
       if (!isBackground) setLoading(false);
       setRefreshing(false);
@@ -57,10 +71,29 @@ export default function DashboardScreen({ navigation }) {
   };
 
   if (loading && !refreshing) {
+    const shimmerOpacity = shimmerAnim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0.7] });
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color={Colors.primary} />
-        <Text style={styles.loadingText}>Conectando al servidor...</Text>
+      <View style={styles.container}>
+        <View style={styles.content}>
+          {/* Skeleton Header */}
+          <View style={styles.header}>
+            <View>
+              <Animated.View style={[styles.skeleton, {width:120,height:28,opacity:shimmerOpacity}]} />
+              <Animated.View style={[styles.skeleton, {width:160,height:14,marginTop:6,opacity:shimmerOpacity}]} />
+            </View>
+            <Animated.View style={[styles.skeleton, {width:80,height:28,borderRadius:14,opacity:shimmerOpacity}]} />
+          </View>
+          {/* Skeleton Hero Card */}
+          <Animated.View style={[styles.skeleton, {width:'100%',height:180,borderRadius:20,marginBottom:16,opacity:shimmerOpacity}]} />
+          {/* Skeleton Stats Grid */}
+          <View style={styles.statsGrid}>
+            {[1,2,3,4].map(i => (
+              <View key={i} style={styles.statWrapper}>
+                <Animated.View style={[styles.skeleton, {width:'100%',height:100,borderRadius:16,opacity:shimmerOpacity}]} />
+              </View>
+            ))}
+          </View>
+        </View>
       </View>
     );
   }
@@ -96,9 +129,9 @@ export default function DashboardScreen({ navigation }) {
           <Text style={styles.greeting}>Yape Bot</Text>
           <Text style={styles.subtitle}>Panel de Control v{data?.version || '3.0'}</Text>
         </View>
-        <View style={[styles.statusBadge, { backgroundColor: Colors.successBg }]}>
-          <View style={[styles.statusDot, { backgroundColor: Colors.success }]} />
-          <Text style={[styles.statusText, { color: Colors.success }]}>Online</Text>
+        <View style={[styles.statusBadge, { backgroundColor: serverOnline ? Colors.successBg : Colors.dangerBg }]}>
+          <View style={[styles.statusDot, { backgroundColor: serverOnline ? Colors.success : Colors.danger }]} />
+          <Text style={[styles.statusText, { color: serverOnline ? Colors.success : Colors.danger }]}>{serverOnline ? 'Online' : 'Offline'}</Text>
         </View>
       </View>
 
@@ -389,5 +422,9 @@ const styles = StyleSheet.create({
     color: Colors.success,
     fontSize: FontSize.md,
     fontWeight: '700',
+  },
+  skeleton: {
+    backgroundColor: Colors.bgCardLight,
+    borderRadius: BorderRadius.md,
   },
 });

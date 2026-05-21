@@ -55,41 +55,107 @@ export async function isConfigured() {
   return !!(url && key);
 }
 
+// ============================================================
+// Cache en memoria con TTL para requests GET
+// ============================================================
+const apiCache = new Map();
+const CACHE_TTL = {
+  '/dashboard': 20000,        // 20s — datos cambian poco
+  '/orders/pending': 10000,   // 10s — pedidos se actualizan
+  '/orders/all': 10000,       // 10s
+  '/reports/weekly': 60000,   // 60s — reportes cambian poco
+  '/reports/daily': 30000,    // 30s
+  '/notifications': 15000,    // 15s
+};
+
+function getCachedResponse(endpoint) {
+  const cached = apiCache.get(endpoint);
+  if (!cached) return null;
+  if (Date.now() - cached.timestamp > (CACHE_TTL[endpoint] || 15000)) {
+    apiCache.delete(endpoint);
+    return null;
+  }
+  return cached.data;
+}
+
+function setCachedResponse(endpoint, data) {
+  if (CACHE_TTL[endpoint]) {
+    apiCache.set(endpoint, { data, timestamp: Date.now() });
+  }
+}
+
+// Invalidar caché cuando hacemos POST (mutaciones)
+function invalidateCache() {
+  apiCache.clear();
+}
+
 async function apiRequest(endpoint, method = 'GET', body = null) {
   const { url, key } = await getConfig();
   if (!url || !key) throw new Error('Servidor no configurado. Ve a Configuración.');
 
-  const options = {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      'X-API-Key': key,
-    },
+  // Usar caché solo para GET
+  if (method === 'GET') {
+    const cached = getCachedResponse(endpoint);
+    if (cached) return cached;
+  } else {
+    // POST/PUT/DELETE invalidan caché
+    invalidateCache();
+  }
+
+  const doFetch = async () => {
+    const options = {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': key,
+      },
+    };
+
+    if (body) options.body = JSON.stringify(body);
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    options.signal = controller.signal;
+
+    try {
+      const response = await fetch(`${url}/api${endpoint}`, options);
+      clearTimeout(timeout);
+
+      if (response.status === 401) {
+        throw new Error('API Key inválida. Verifica en Configuración.');
+      }
+
+      const data = await response.json();
+      if (!data.ok && data.error) throw new Error(data.error);
+
+      // Guardar en caché si es GET
+      if (method === 'GET') setCachedResponse(endpoint, data);
+
+      return data;
+    } catch (error) {
+      clearTimeout(timeout);
+      if (error.name === 'AbortError') {
+        throw new Error('Timeout: el servidor no respondió en 15s.');
+      }
+      throw error;
+    }
   };
 
-  if (body) options.body = JSON.stringify(body);
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000);
-  options.signal = controller.signal;
-
+  // Reintento automático (1 vez) para errores de red
   try {
-    const response = await fetch(`${url}/api${endpoint}`, options);
-    clearTimeout(timeout);
-
-    if (response.status === 401) {
-      throw new Error('API Key inválida. Verifica en Configuración.');
+    return await doFetch();
+  } catch (firstError) {
+    // No reintentar errores de auth o validación
+    if (firstError.message.includes('API Key') || firstError.message.includes('configurado')) {
+      throw firstError;
     }
-
-    const data = await response.json();
-    if (!data.ok && data.error) throw new Error(data.error);
-    return data;
-  } catch (error) {
-    clearTimeout(timeout);
-    if (error.name === 'AbortError') {
-      throw new Error('Timeout: el servidor no respondió en 15s.');
+    // Esperar 1s y reintentar
+    await new Promise(r => setTimeout(r, 1000));
+    try {
+      return await doFetch();
+    } catch (retryError) {
+      throw firstError; // Lanzar el error original
     }
-    throw error;
   }
 }
 
@@ -100,34 +166,54 @@ async function apiRequest(endpoint, method = 'GET', body = null) {
 export const api = {
   // Push Notifications
   registerPushToken: async () => {
-    if (!Device.isDevice) return;
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-    if (finalStatus !== 'granted') {
-      throw new Error('Permisos de notificación denegados por el usuario.');
-    }
-
-    if (Platform.OS === 'android') {
-      Notifications.setNotificationChannelAsync('default', {
-        name: 'default',
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#8a2be2',
-      });
-    }
-
+    if (!Device.isDevice) return null;
     try {
-      const projectId = '44fc55a5-cf96-4905-9e8e-c030d393ac41'; // From app.json
-      const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
-      await apiRequest('/push-token', 'POST', { token });
-      return token;
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      if (finalStatus !== 'granted') {
+        console.warn('Push: permisos denegados');
+        return null;
+      }
+
+      if (Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync('default', {
+          name: 'Pedidos YapeBot',
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#8a2be2',
+          sound: 'default',
+        });
+      }
+
+      // FCM Device Token PRIMERO (funciona con builds locales)
+      try {
+        const deviceToken = await Notifications.getDevicePushTokenAsync();
+        const fcmToken = deviceToken.data;
+        await apiRequest('/push-token', 'POST', { token: fcmToken, type: 'fcm' });
+        console.log('Push: FCM device token registrado:', fcmToken.substring(0, 20) + '...');
+        return fcmToken;
+      } catch (fcmErr) {
+        console.warn('FCM token no disponible, intentando Expo...', fcmErr.message);
+      }
+
+      // Fallback: Expo Push Token (solo funciona con EAS builds)
+      try {
+        const projectId = '44fc55a5-cf96-4905-9e8e-c030d393ac41';
+        const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+        await apiRequest('/push-token', 'POST', { token, type: 'expo' });
+        console.log('Push: Expo token registrado');
+        return token;
+      } catch (expoErr) {
+        console.warn('Expo Push Token tampoco disponible:', expoErr.message);
+        return null;
+      }
     } catch (e) {
-      console.warn('Error registerPushToken:', e);
-      throw new Error(`Fallo al generar Push Token: ${e.message}`);
+      console.warn('Push token error general:', e.message);
+      return null;
     }
   },
   testPushNotification: () => apiRequest('/test-push', 'POST'),
@@ -149,6 +235,7 @@ export const api = {
   // Reportes
   getDailyReport: (date) => apiRequest(`/reports/daily${date ? `?date=${date}` : ''}`),
   getWeeklyReport: () => apiRequest('/reports/weekly'),
+  getMonthlyReport: () => apiRequest('/reports/monthly'),
 
   // Notificaciones
   getNotifications: (limit = 20) => apiRequest(`/notifications?limit=${limit}`),

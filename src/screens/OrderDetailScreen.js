@@ -112,6 +112,8 @@ export default function OrderDetailScreen({ route, navigation }) {
   const status = STATUS_MAP[order.status] || { label: order.status, color: Colors.textSecondary, icon: 'help-circle' };
   const customerName = `${order.customer.first_name} ${order.customer.last_name}`.trim();
   const hasOverride = order.override_price !== null && order.override_price !== undefined;
+  const hasSuggested = order.suggested_price !== null && order.suggested_price !== undefined && order.suggested_price > 0;
+  const displayPrice = hasOverride ? order.override_price : (hasSuggested ? order.suggested_price : null);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -130,11 +132,13 @@ export default function OrderDetailScreen({ route, navigation }) {
       {/* Amount */}
       <View style={styles.amountSection}>
         <Text style={styles.amountLabel}>Total del pedido</Text>
-        {hasOverride ? (
+        {displayPrice ? (
           <>
             <Text style={styles.amountStrikethrough}>S/ {order.total}</Text>
-            <Text style={styles.amountOverride}>S/ {order.override_price.toFixed(2)}</Text>
-            <Text style={styles.overrideHint}>💡 Precio editado (solo local)</Text>
+            <Text style={styles.amountOverride}>S/ {parseFloat(displayPrice).toFixed(2)}</Text>
+            <Text style={styles.overrideHint}>
+              {hasOverride ? '💡 Precio editado (solo local)' : '🏷️ Precio real (auto-calculado)'}
+            </Text>
           </>
         ) : (
           <Text style={styles.amountValue}>S/ {order.total}</Text>
@@ -147,14 +151,17 @@ export default function OrderDetailScreen({ route, navigation }) {
         <TouchableOpacity
           style={styles.editPriceBtn}
           onPress={() => {
-            setPriceInput(hasOverride ? order.override_price.toString() : '');
+            setPriceInput(
+              hasOverride ? order.override_price.toString() :
+              (hasSuggested ? order.suggested_price.toString() : '')
+            );
             setShowPriceModal(true);
           }}
         >
           <LinearGradient colors={['#f97316', '#ea580c']} style={styles.editPriceGradient}>
             <Ionicons name="create" size={18} color="#fff" />
             <Text style={styles.editPriceText}>
-              {hasOverride ? 'Cambiar Precio Real' : 'Asignar Precio Real'}
+              {hasOverride ? 'Cambiar Precio Real' : (hasSuggested ? 'Ajustar Precio' : 'Asignar Precio Real')}
             </Text>
           </LinearGradient>
         </TouchableOpacity>

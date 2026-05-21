@@ -2,7 +2,10 @@
   "expo": {
     "name": "Yape Dashboard",
     "slug": "yape-dashboard",
-    "version": "3.0.0",
+    "version": "3.2.0",
+    "android": {
+      "versionCode": 5
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -27,6 +30,7 @@
           }
         }
       ],
+      "./withNotificationService",
       "expo-asset",
       "expo-font"
     ],

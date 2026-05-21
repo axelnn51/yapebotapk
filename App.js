@@ -15,6 +15,46 @@ import SettingsScreen from './src/screens/SettingsScreen';
 import LogsScreen from './src/screens/LogsScreen';
 import { api } from './src/services/api';
 import * as Notifications from 'expo-notifications';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+
+// ============================================================
+// Error Boundary — Captura crashes de React y muestra pantalla de recuperación
+// ============================================================
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={ebStyles.container}>
+          <Text style={ebStyles.emoji}>⚠️</Text>
+          <Text style={ebStyles.title}>Algo salió mal</Text>
+          <Text style={ebStyles.message}>{this.state.error?.message || 'Error desconocido'}</Text>
+          <TouchableOpacity
+            style={ebStyles.button}
+            onPress={() => this.setState({ hasError: false, error: null })}
+          >
+            <Text style={ebStyles.buttonText}>Reintentar</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
+const ebStyles = StyleSheet.create({
+  container: { flex:1, backgroundColor:'#0a0a1a', justifyContent:'center', alignItems:'center', padding:32 },
+  emoji: { fontSize:64, marginBottom:16 },
+  title: { color:'#f1f5f9', fontSize:24, fontWeight:'800', marginBottom:8 },
+  message: { color:'#94a3b8', fontSize:14, textAlign:'center', marginBottom:24 },
+  button: { backgroundColor:'#7c3aed', paddingHorizontal:32, paddingVertical:14, borderRadius:12 },
+  buttonText: { color:'#fff', fontWeight:'700', fontSize:16 },
+});
 
 const navigationRef = React.createRef();
 
@@ -95,6 +135,7 @@ export default function App() {
   }, []);
 
   return (
+    <ErrorBoundary>
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <NavigationContainer ref={navigationRef} theme={customTheme}>
@@ -132,5 +173,6 @@ export default function App() {
     </NavigationContainer>
       </SafeAreaProvider>
     </GestureHandlerRootView>
+    </ErrorBoundary>
   );
 }

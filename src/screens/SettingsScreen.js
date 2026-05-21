@@ -4,12 +4,14 @@ import {
   TouchableOpacity, Alert, ActivityIndicator, KeyboardAvoidingView, Platform,
   Animated, Dimensions,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, Spacing, FontSize, BorderRadius } from '../theme/colors';
 import { getConfig, saveConfig, api } from '../services/api';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
+import * as Notifications from 'expo-notifications';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -121,11 +123,17 @@ export default function SettingsScreen({ navigation }) {
   const [notifData, setNotifData] = useState(null);
   const [simOrderId, setSimOrderId] = useState('12345');
   const [simAmount, setSimAmount] = useState('45.00');
+  // v4: Listener health monitoring
+  const [lastNotif, setLastNotif] = useState(null);
+  const [notifCount, setNotifCount] = useState(0);
+  const [heartbeat, setHeartbeat] = useState(null);
+  const [debugRaw, setDebugRaw] = useState(null);
 
   useEffect(() => { 
     loadConfig(); 
     checkPermission();
-    const interval = setInterval(checkPermission, 3000);
+    loadListenerStatus();
+    const interval = setInterval(() => { checkPermission(); loadListenerStatus(); }, 3000);
     return () => clearInterval(interval);
   }, []);
 
@@ -143,6 +151,19 @@ export default function SettingsScreen({ navigation }) {
     }
   };
 
+  const loadListenerStatus = async () => {
+    try {
+      const lastStr = await AsyncStorage.getItem('@yape_last_notification');
+      if (lastStr) setLastNotif(JSON.parse(lastStr));
+      const countStr = await AsyncStorage.getItem('@yape_notification_count');
+      if (countStr) setNotifCount(parseInt(countStr, 10));
+      const hbStr = await AsyncStorage.getItem('@yape_listener_heartbeat');
+      if (hbStr) setHeartbeat(JSON.parse(hbStr));
+      const debugStr = await AsyncStorage.getItem('@yape_debug_last_raw');
+      if (debugStr) setDebugRaw(JSON.parse(debugStr));
+    } catch (e) { /* ignore */ }
+  };
+
   const loadConfig = async () => {
     const cfg = await getConfig();
     if (cfg.url) setServerUrl(cfg.url);
@@ -155,14 +176,30 @@ export default function SettingsScreen({ navigation }) {
     setSaving(true);
     try {
       await saveConfig(serverUrl.trim(), apiKey.trim());
-      try {
-        await api.registerPushToken();
-        Alert.alert('✅', 'Configuración guardada y Push Token registrado');
-      } catch (e) {
-        Alert.alert('⚠️ Configuración Guardada', `Pero ocurrió un error con las notificaciones: ${e.message}`);
+      const token = await api.registerPushToken();
+      if (token) {
+        Alert.alert('✅ Configuración Guardada', 'Push Token registrado correctamente.');
+      } else {
+        Alert.alert('✅ Configuración Guardada', 'Conexión configurada. Las notificaciones push no están disponibles (requiere Firebase), pero el lector de notificaciones de Yape funciona normalmente.');
       }
     } catch (e) { Alert.alert('Error', e.message); }
     finally { setSaving(false); }
+  };
+
+  const testListener = async () => {
+    try {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'Yape! de Antigravity',
+          body: 'Antigravity te envió S/ 1.00. El sistema de lectura funciona!',
+          data: { test: true },
+        },
+        trigger: null, // instant
+      });
+      Alert.alert('🔔 Notificación Enviada', 'En 1-2 segundos el contador de lecturas debería subir y mostrarse en "Última lectura".');
+    } catch (e) {
+      Alert.alert('Error', e.message);
+    }
   };
 
   const handleTest = async () => {
@@ -202,8 +239,14 @@ export default function SettingsScreen({ navigation }) {
         setOcrResult(null);
         try {
           const apiResult = await api.testOCR(result.assets[0].uri, ocrAmount || '0');
-          setOcrResult(apiResult);
+          // Show OCR data if available, otherwise show the full response
+          const ocrData = apiResult.data || apiResult;
+          setOcrResult(ocrData);
+          if (ocrData && ocrData.success === false) {
+            Alert.alert('ℹ️ OCR', 'No se pudo extraer datos de la imagen. Asegúrate de subir una captura real de Yape/Plin/BBVA.');
+          }
         } catch (e) {
+          setOcrResult({ error: e.message });
           Alert.alert('❌ Error OCR', e.message);
         } finally {
           setTestingOcr(false);
@@ -221,7 +264,11 @@ export default function SettingsScreen({ navigation }) {
       const result = await api.testPushNotification();
       Alert.alert('✅ Notificación Enviada', `Se envió a ${result.sent_to} dispositivo(s).`);
     } catch (e) {
-      Alert.alert('❌ Error Push', e.message);
+      if (e.message && e.message.includes('No tokens')) {
+        Alert.alert('ℹ️ Push No Disponible', 'Las notificaciones Push requieren configuración de Firebase (google-services.json). Sin embargo, el lector de notificaciones de Yape funciona perfectamente sin esto.');
+      } else {
+        Alert.alert('❌ Error Push', e.message);
+      }
     } finally {
       setTestingRealPush(false);
     }
@@ -271,7 +318,10 @@ export default function SettingsScreen({ navigation }) {
         </View>
 
         <View style={s.card}>
-          <Text style={s.label}>Lector de Notificaciones (Fondo)</Text>
+          <View style={{flexDirection:'row', alignItems:'center', gap:8, marginBottom:Spacing.sm}}>
+            <Ionicons name="ear" size={20} color={hasPermission ? Colors.success : Colors.danger} />
+            <Text style={s.label}>Lector de Notificaciones</Text>
+          </View>
           <View style={s.statusRow}>
             <View style={[s.indicator, { backgroundColor: hasPermission ? Colors.success : Colors.danger }]} />
             <Text style={s.statusText}>
@@ -282,6 +332,64 @@ export default function SettingsScreen({ navigation }) {
             <TouchableOpacity style={s.permissionBtn} onPress={requestPermission}>
               <Text style={s.permissionTxt}>Conceder Permiso Android</Text>
             </TouchableOpacity>
+          )}
+
+          {/* Listener Health Monitor */}
+          {hasPermission && (
+            <View style={{marginTop:Spacing.md, backgroundColor:Colors.bg, borderRadius:BorderRadius.md, padding:Spacing.md, borderWidth:1, borderColor:Colors.border}}>
+              <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom:Spacing.sm}}>
+                <Text style={{color:Colors.textSecondary, fontSize:FontSize.xs}}>📊 Lecturas totales</Text>
+                <Text style={{color:Colors.success, fontSize:FontSize.md, fontWeight:'700'}}>{notifCount}</Text>
+              </View>
+              {heartbeat && (
+                <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom:Spacing.sm}}>
+                  <Text style={{color:Colors.textSecondary, fontSize:FontSize.xs}}>💓 Último heartbeat</Text>
+                  <Text style={{color:Colors.primaryLight, fontSize:FontSize.xs}}>
+                    {heartbeat.time ? new Date(heartbeat.time).toLocaleTimeString('es-PE') : '-'}
+                  </Text>
+                </View>
+              )}
+              {lastNotif ? (
+                <View style={{borderTopWidth:1, borderTopColor:Colors.border, paddingTop:Spacing.sm}}>
+                  <View style={{flexDirection:'row', alignItems:'center', gap:4, marginBottom:4}}>
+                    <Text style={{fontSize:12}}>{lastNotif.status === 'sent' ? '✅' : lastNotif.status === 'error' ? '❌' : '⚠️'}</Text>
+                    <Text style={{color:Colors.text, fontSize:FontSize.sm, fontWeight:'600'}}>Última lectura</Text>
+                    <Text style={{color:Colors.textMuted, fontSize:FontSize.xs, marginLeft:'auto'}}>
+                      {lastNotif.time ? new Date(lastNotif.time).toLocaleTimeString('es-PE') : ''}
+                    </Text>
+                  </View>
+                  <Text style={{color:Colors.textSecondary, fontSize:FontSize.xs}} numberOfLines={2}>
+                    {lastNotif.text || lastNotif.error || 'Sin datos'}
+                  </Text>
+                  {lastNotif.amount && (
+                    <Text style={{color:Colors.success, fontSize:FontSize.sm, fontWeight:'700', marginTop:2}}>S/ {lastNotif.amount}</Text>
+                  )}
+                </View>
+              ) : (
+                <Text style={{color:Colors.textMuted, fontSize:FontSize.xs, fontStyle:'italic'}}>Aún no se ha capturado ninguna notificación de pago</Text>
+              )}
+              
+              <TouchableOpacity 
+                style={{marginTop:Spacing.md, backgroundColor:Colors.primary + '20', padding:Spacing.sm, borderRadius:BorderRadius.sm, alignItems:'center', borderWidth:1, borderColor:Colors.primary + '40'}}
+                onPress={testListener}
+              >
+                <Text style={{color:Colors.primaryLight, fontSize:FontSize.xs, fontWeight:'700'}}>TEST DE CAPTURA LOCAL</Text>
+              </TouchableOpacity>
+
+              {/* 🔍 DIAGNÓSTICO: Última notificación RAW de app de pago */}
+              {debugRaw && (
+                <View style={{marginTop:Spacing.md, backgroundColor:'#1a0a2e', borderRadius:BorderRadius.sm, padding:Spacing.sm, borderWidth:1, borderColor:'#f59e0b40'}}>
+                  <Text style={{color:'#f59e0b', fontSize:FontSize.xs, fontWeight:'700', marginBottom:4}}>🔍 DEBUG: Última notif de app de pago</Text>
+                  <Text style={{color:Colors.textSecondary, fontSize:10}}>App: {debugRaw.app || '?'}</Text>
+                  <Text style={{color:Colors.textSecondary, fontSize:10}}>Title: {debugRaw.title || '?'}</Text>
+                  <Text style={{color:Colors.textSecondary, fontSize:10}}>Text: {debugRaw.text || '?'}</Text>
+                  <Text style={{color: debugRaw.passed_filter === false ? Colors.danger : Colors.success, fontSize:10, fontWeight:'700', marginTop:2}}>
+                    Filtro: {debugRaw.passed_filter === false ? `❌ FILTRADO (${debugRaw.reason})` : debugRaw.passed_filter === 'pending' ? '⏳ Procesando...' : '✅ Pasó'}
+                  </Text>
+                  <Text style={{color:Colors.textMuted, fontSize:9}}>{debugRaw.time ? new Date(debugRaw.time).toLocaleTimeString('es-PE') : ''}</Text>
+                </View>
+              )}
+            </View>
           )}
           <Text style={s.hint}>⚠️ Recuerda quitar la optimización de batería de Android para que la app no se cierre.</Text>
         </View>
@@ -416,6 +524,12 @@ export default function SettingsScreen({ navigation }) {
           <Text style={s.infoText}>
             La API Key se configura en el archivo .env del servidor como APP_API_KEY. La app se conecta a los endpoints /api/* de tu servidor Yape Bot.
           </Text>
+        </View>
+
+        {/* Version Footer */}
+        <View style={{alignItems:'center', marginTop:Spacing.lg, paddingBottom:Spacing.lg}}>
+          <Text style={{color:Colors.textMuted, fontSize:FontSize.xs}}>YapeBot Dashboard v3.1.2</Text>
+          <Text style={{color:Colors.textMuted, fontSize:10, marginTop:2}}>Build: {new Date().toLocaleDateString('es-PE')}</Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

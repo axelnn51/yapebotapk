@@ -9,3 +9,7 @@ dist/
 *.orig.*
 web-build/
 .env
+build_info.json
+build_log.txt
+*.log
+*.apk

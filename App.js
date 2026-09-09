@@ -106,10 +106,15 @@ function OrdersStack() {
   );
 }
 
+import DiagnosticScreen from './src/screens/DiagnosticScreen';
+import { logEvent, EVENT_TYPES } from './src/services/eventLogger';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 function SettingsStack() {
   return (
     <Stack.Navigator screenOptions={screenOptions}>
       <Stack.Screen name="SettingsMain" component={SettingsScreen} options={{ title: 'Configuración' }} />
+      <Stack.Screen name="Diagnostic" component={DiagnosticScreen} options={{ title: '🩺 Diagnóstico del Sistema' }} />
       <Stack.Screen name="Logs" component={LogsScreen} options={{ title: '📋 Logs del Sistema' }} />
     </Stack.Navigator>
   );
@@ -120,8 +125,20 @@ export default function App() {
     // Registrar Push Token al iniciar
     api.registerPushToken().catch(console.warn);
 
+    // Escuchar notificaciones Push recibidas (Foreground / Background)
+    const receivedSub = Notifications.addNotificationReceivedListener(notification => {
+      const content = notification.request.content;
+      AsyncStorage.setItem('@yape_last_push_received', new Date().toISOString()).catch(() => {});
+      logEvent(
+        'FCM',
+        content.title || 'Push recibido',
+        content.body || '',
+        EVENT_TYPES.PUSH_RECEIVED
+      ).catch(() => {});
+    });
+
     // Escuchar cuando el usuario toca la notificación
-    const subscription = Notifications.addNotificationResponseReceivedListener(response => {
+    const responseSub = Notifications.addNotificationResponseReceivedListener(response => {
       const data = response.notification.request.content.data;
       if (data?.orderId && navigationRef.current) {
         navigationRef.current.navigate('Pedidos', {
@@ -131,7 +148,10 @@ export default function App() {
       }
     });
 
-    return () => subscription.remove();
+    return () => {
+      receivedSub.remove();
+      responseSub.remove();
+    };
   }, []);
 
   return (

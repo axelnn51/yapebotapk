@@ -3,170 +3,212 @@ import { registerRootComponent } from 'expo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import App from './App';
 import { AppRegistry } from 'react-native';
+import { parseBankNotification, extractFullText, isMonitoredApp } from './src/services/bankParser';
+import { logEvent, EVENT_TYPES } from './src/services/eventLogger';
+import { enqueueAndSend, flushQueue } from './src/services/notificationQueue';
 
-let RNAndroidNotificationListenerHeadlessJsName;
-try {
-    const mod = require('react-native-android-notification-listener');
-    RNAndroidNotificationListenerHeadlessJsName = mod.RNAndroidNotificationListenerHeadlessJsName;
-} catch (e) {
-    // Module not available in dev builds
-}
+// ============================================================
+// Función de envío directo al backend autenticado
+// ============================================================
+const sendToBackend = async (parsed) => {
+  const url = await AsyncStorage.getItem('@yape_server_url');
+  const key = await AsyncStorage.getItem('@yape_api_key');
+
+  if (!url || !key) {
+    throw new Error('Servidor o API Key no configurados en Configuración.');
+  }
+
+  const cleanUrl = url.replace(/\/+$/, '');
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const response = await fetch(`${cleanUrl}/api/incoming-notification`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': key,
+      },
+      body: JSON.stringify({
+        sender: parsed.senderName || parsed.title || parsed.provider || 'Yape/Plin',
+        text: parsed.rawText,
+        amount: parsed.amount,
+        securityCode: parsed.securityCode,
+        provider: parsed.provider,
+        packageName: parsed.packageName,
+        timestamp: parsed.timestamp,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const result = await response.json();
+    return result;
+  } catch (e) {
+    clearTimeout(timeout);
+    throw e;
+  }
+};
 
 // ============================================================
 // Headless JS Task — Captura notificaciones de Yape/Plin/BBVA
-// en segundo plano y las envía al backend via /api/incoming-notification
-// Captura SILENCIOSA: no genera notificaciones en la app, solo guarda
-// y envía al servidor (que reenvía a Telegram).
+// en segundo plano, encola con reintentos y envía al backend
 // ============================================================
 const headlessNotificationListener = async ({ notification }) => {
-    if (!notification) return;
+  if (!notification) return;
 
+  try {
+    const notif = JSON.parse(notification);
+    const app = notif.app || 'unknown';
+
+    // 1. Guardar Heartbeat (indica que el listener nativo y Headless están vivos)
     try {
-        const notif = JSON.parse(notification);
-        const { app, title, text, time } = notif;
+      await AsyncStorage.setItem('@yape_listener_heartbeat', JSON.stringify({
+        time: new Date().toISOString(),
+        app,
+        alive: true,
+      }));
+    } catch (e) { /* ignore */ }
 
-        // Guardar heartbeat — indica que el listener está vivo
-        // (Esto se registra para TODA notificación)
-        try {
-            await AsyncStorage.setItem('@yape_listener_heartbeat', JSON.stringify({
-                time: new Date().toISOString(),
-                app: app || 'unknown',
-                alive: true,
-            }));
-        } catch (e) { /* ignore storage errors */ }
+    // 2. Extraer todo el texto disponible (text, bigText, title, etc.)
+    const fullText = extractFullText(notif);
 
-        // Solo procesar apps de pago
-        const validApps = [
-            'com.bcp.innovacxion.yapeapp', // Yape (nombre real del APK)
-            'com.bcp.innovacxion.yape',    // Yape (variante antigua)
-            'com.bbva.nxt_peru',           // BBVA
-            'pe.interbank.banca',          // Interbank/Plin
-        ];
+    // 3. Registrar RAW de diagnóstico para TODA notificación de app monitoreada
+    const rawRecord = {
+      time: new Date().toISOString(),
+      app,
+      title: (notif.title || '').substring(0, 120),
+      text: (notif.text || '').substring(0, 200),
+      bigText: (notif.bigText || '').substring(0, 200),
+      fullText: fullText.substring(0, 300),
+    };
 
-        // También aceptar cualquier app que contenga "yape" en el nombre
-        const isValidApp = validApps.includes(app) || 
-            (app && app.toLowerCase().includes('yape'));
+    // Guardar último raw para diagnóstico inmediato
+    try {
+      await AsyncStorage.setItem('@yape_debug_last_raw', JSON.stringify(rawRecord));
+    } catch (e) { /* ignore */ }
 
-        // 🔍 DIAGNÓSTICO: Guardar info de CUALQUIER notificación de app de pago
-        // (incluso si después se filtra por texto)
-        if (isValidApp) {
-            try {
-                await AsyncStorage.setItem('@yape_debug_last_raw', JSON.stringify({
-                    time: new Date().toISOString(),
-                    app,
-                    title: (title || '').substring(0, 100),
-                    text: (text || '').substring(0, 200),
-                    passed_filter: 'pending',
-                }));
-            } catch (e) { /* ignore */ }
-        }
+    // Loguear evento RAW
+    await logEvent(
+      app.includes('.') ? app.split('.').pop() : app,
+      'Notificación recibida en Android',
+      `${notif.title ? notif.title + ': ' : ''}${fullText.substring(0, 80)}`,
+      EVENT_TYPES.NOTIFICATION_RAW
+    );
 
-        if (!isValidApp) return;
-
-        // Filtro: solo notificaciones que parezcan pagos
-        // Más permisivo: cualquier mención de dinero, pago, envío, o confirmación
-        const textLower = (text || '').toLowerCase();
-        const titleLower = (title || '').toLowerCase();
-        const combined = `${titleLower} ${textLower}`;
-
-        const isPayment = combined.includes('s/') || 
-            combined.includes('soles') || 
-            combined.includes('envi') ||      // envió, envio, enviaste (sin depender de acentos)
-            combined.includes('recib') ||     // recibiste, recibido
-            combined.includes('pago') ||      // pago, pagó
-            combined.includes('transferencia') ||
-            combined.includes('depósito') ||
-            combined.includes('deposito') ||
-            combined.includes('yape') ||      // ¡Yapeaste! / Te yapearon
-            combined.includes('plin') ||      // plineaste
-            /\d+[.,]\d{2}/.test(combined);    // cualquier número con decimales (ej: 35.00)
-
-        if (!isPayment) {
-            // Guardar que fue filtrado para diagnóstico
-            try {
-                await AsyncStorage.setItem('@yape_debug_last_raw', JSON.stringify({
-                    time: new Date().toISOString(),
-                    app,
-                    title: (title || '').substring(0, 100),
-                    text: (text || '').substring(0, 200),
-                    passed_filter: false,
-                    reason: 'No payment keywords found',
-                }));
-            } catch (e) { /* ignore */ }
-            return;
-        }
-
-        // ⚠️ CRÍTICO: Usar las MISMAS keys que api.js
-        const url = await AsyncStorage.getItem('@yape_server_url');
-        const key = await AsyncStorage.getItem('@yape_api_key');
-
-        if (!url || !key) {
-            console.log('[YapeBot Listener] ⚠️ No hay configuración guardada');
-            await AsyncStorage.setItem('@yape_last_notification', JSON.stringify({
-                time: new Date().toISOString(),
-                text: text?.substring(0, 80) || '',
-                app: app,
-                status: 'error',
-                error: 'No hay configuración (URL/API Key)',
-            }));
-            return;
-        }
-
-        const cleanUrl = url.replace(/\/+$/, '');
-
-        // Enviar al endpoint autenticado /api/incoming-notification
-        // El backend se encarga de: guardar, cruzar con WooCommerce, y enviar a Telegram
-        const response = await fetch(`${cleanUrl}/api/incoming-notification`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-API-Key': key,
-            },
-            body: JSON.stringify({
-                sender: title || 'Yape/Plin',
-                text: text || '',
-            }),
-        });
-
-        const result = await response.json();
-        console.log(`[YapeBot Listener] ✅ Enviado: S/ ${result?.result?.amount || '?'} | OK: ${result?.ok}`);
-
-        // Guardar en AsyncStorage para la UI (silencioso, sin notificación)
-        await AsyncStorage.setItem('@yape_last_notification', JSON.stringify({
-            time: new Date().toISOString(),
-            text: text?.substring(0, 80) || '',
-            app: app,
-            amount: result?.result?.amount || null,
-            status: result?.ok ? 'sent' : 'failed',
-            response: result?.ok ? 'OK' : (result?.reason || 'Error'),
-        }));
-
-        // Incrementar contador de lecturas
-        try {
-            const countStr = await AsyncStorage.getItem('@yape_notification_count');
-            const count = parseInt(countStr || '0', 10) + 1;
-            await AsyncStorage.setItem('@yape_notification_count', String(count));
-        } catch (e) { /* ignore */ }
-
-    } catch (e) {
-        console.log(`[YapeBot Listener] ❌ Error: ${e.message}`);
-        try {
-            await AsyncStorage.setItem('@yape_last_notification', JSON.stringify({
-                time: new Date().toISOString(),
-                status: 'error',
-                error: e.message,
-            }));
-        } catch (storageErr) { /* ignore */ }
+    // 4. Verificar si es una app bancaria monitoreada
+    if (!isMonitoredApp(app, fullText)) {
+      await logEvent(
+        'FILTRO',
+        'App no monitoreada (ignorada)',
+        `Package: ${app}`,
+        EVENT_TYPES.PAYMENT_IGNORED
+      );
+      return;
     }
+
+    // 5. Parsear notificación bancaria
+    const parsed = parseBankNotification(notif);
+
+    // Guardar timestamp de última actividad bancaria por proveedor
+    const providerKey = (parsed.provider || 'unknown').toLowerCase();
+    await AsyncStorage.setItem(`@yape_last_${providerKey}`, new Date().toISOString());
+    await AsyncStorage.setItem('@yape_last_bank_any', new Date().toISOString());
+
+    // 6. Verificar si es un pago real
+    if (!parsed.isPayment) {
+      await logEvent(
+        parsed.provider,
+        'Notificación no corresponde a pago',
+        parsed.rawText.substring(0, 70),
+        EVENT_TYPES.PAYMENT_IGNORED
+      );
+
+      await AsyncStorage.setItem('@yape_last_notification', JSON.stringify({
+        time: new Date().toISOString(),
+        text: parsed.rawText.substring(0, 80),
+        app,
+        provider: parsed.provider,
+        status: 'ignored',
+        reason: 'No es pago',
+      }));
+      return;
+    }
+
+    // 7. Es un pago bancario válido -> Encolar e intentar envío
+    await logEvent(
+      parsed.provider,
+      `💰 Pago detectado S/ ${parsed.amount}`,
+      `De: ${parsed.senderName}${parsed.securityCode ? ' | Cód: ' + parsed.securityCode : ''}`,
+      EVENT_TYPES.PAYMENT_DETECTED
+    );
+
+    const queueResult = await enqueueAndSend(parsed, sendToBackend);
+
+    // Actualizar estado para la UI
+    if (queueResult.ok && queueResult.status === 'sent') {
+      await AsyncStorage.setItem('@yape_last_notification', JSON.stringify({
+        time: new Date().toISOString(),
+        text: parsed.rawText.substring(0, 80),
+        app,
+        provider: parsed.provider,
+        amount: parsed.amount,
+        sender: parsed.senderName,
+        securityCode: parsed.securityCode,
+        status: 'sent',
+        response: 'HTTP 200 (OK)',
+      }));
+
+      // Incrementar contador de lecturas exitosas
+      try {
+        const countStr = await AsyncStorage.getItem('@yape_notification_count');
+        const count = parseInt(countStr || '0', 10) + 1;
+        await AsyncStorage.setItem('@yape_notification_count', String(count));
+      } catch (e) { /* ignore */ }
+
+      // Intentar vaciar el resto de la cola en segundo plano si había pendientes
+      flushQueue(sendToBackend).catch(() => {});
+    } else {
+      await AsyncStorage.setItem('@yape_last_notification', JSON.stringify({
+        time: new Date().toISOString(),
+        text: parsed.rawText.substring(0, 80),
+        app,
+        provider: parsed.provider,
+        amount: parsed.amount,
+        sender: parsed.senderName,
+        securityCode: parsed.securityCode,
+        status: queueResult.status === 'duplicate_ignored' ? 'duplicate' : 'queued',
+        error: queueResult.error || null,
+        response: queueResult.error || 'Encolado',
+      }));
+    }
+
+  } catch (e) {
+    console.warn(`[YapeBot Listener] Error general: ${e.message}`);
+    await logEvent('LISTENER', `Error en listener: ${e.message}`, '', EVENT_TYPES.BACKEND_ERROR);
+    try {
+      await AsyncStorage.setItem('@yape_last_notification', JSON.stringify({
+        time: new Date().toISOString(),
+        status: 'error',
+        error: e.message,
+      }));
+    } catch (storageErr) { /* ignore */ }
+  }
 };
 
-// Registrar tarea Headless JS
-if (RNAndroidNotificationListenerHeadlessJsName) {
-    AppRegistry.registerHeadlessTask(
-        RNAndroidNotificationListenerHeadlessJsName,
-        () => headlessNotificationListener
-    );
-}
+// ============================================================
+// Registrar tarea Headless JS de forma directa y garantizada
+// ============================================================
+const HEADLESS_TASK_NAME = 'RNAndroidNotificationListenerHeadlessJs';
+AppRegistry.registerHeadlessTask(
+  HEADLESS_TASK_NAME,
+  () => headlessNotificationListener
+);
 
 // Registrar App principal
 registerRootComponent(App);

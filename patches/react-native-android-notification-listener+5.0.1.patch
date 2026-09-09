@@ -32,3 +32,67 @@ index 3cb5acc..134a919 100644
          <service
              android:name=".RNAndroidNotificationListener"
              android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+diff --git a/node_modules/react-native-android-notification-listener/android/src/main/java/com/lesimoes/androidnotificationlistener/RNAndroidNotificationListener.java b/node_modules/react-native-android-notification-listener/android/src/main/java/com/lesimoes/androidnotificationlistener/RNAndroidNotificationListener.java
+index 3fd4647..3287baa 100644
+--- a/node_modules/react-native-android-notification-listener/android/src/main/java/com/lesimoes/androidnotificationlistener/RNAndroidNotificationListener.java
++++ b/node_modules/react-native-android-notification-listener/android/src/main/java/com/lesimoes/androidnotificationlistener/RNAndroidNotificationListener.java
+@@ -13,6 +13,25 @@ import com.facebook.react.HeadlessJsTaskService;
+ 
+ public class RNAndroidNotificationListener extends NotificationListenerService {
+     private static final String TAG = "RNAndroidNotificationListener";
++    private static boolean isConnected = false;
++
++    public static boolean isServiceConnected() {
++        return isConnected;
++    }
++
++    @Override
++    public void onListenerConnected() {
++        super.onListenerConnected();
++        isConnected = true;
++        Log.d(TAG, "NotificationListenerService CONNECTED");
++    }
++
++    @Override
++    public void onListenerDisconnected() {
++        super.onListenerDisconnected();
++        isConnected = false;
++        Log.d(TAG, "NotificationListenerService DISCONNECTED");
++    }
+ 
+     @Override
+     public void onNotificationPosted(StatusBarNotification sbn) {       
+diff --git a/node_modules/react-native-android-notification-listener/android/src/main/java/com/lesimoes/androidnotificationlistener/RNAndroidNotificationListenerModule.java b/node_modules/react-native-android-notification-listener/android/src/main/java/com/lesimoes/androidnotificationlistener/RNAndroidNotificationListenerModule.java
+index 2bd7b44..fe9c877 100644
+--- a/node_modules/react-native-android-notification-listener/android/src/main/java/com/lesimoes/androidnotificationlistener/RNAndroidNotificationListenerModule.java
++++ b/node_modules/react-native-android-notification-listener/android/src/main/java/com/lesimoes/androidnotificationlistener/RNAndroidNotificationListenerModule.java
+@@ -52,4 +52,29 @@ public class RNAndroidNotificationListenerModule extends ReactContextBaseJavaMod
+             this.reactContext.startActivity(i);
+         }
+     }
++
++    @ReactMethod
++    public void isServiceConnected(Promise promise) {
++        promise.resolve(RNAndroidNotificationListener.isServiceConnected());
++    }
++
++    @ReactMethod
++    public void rebindListener(Promise promise) {
++        if (this.reactContext == null) {
++            promise.resolve(false);
++            return;
++        }
++        try {
++            android.content.ComponentName componentName = new android.content.ComponentName(this.reactContext, RNAndroidNotificationListener.class);
++            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
++                RNAndroidNotificationListener.requestRebind(componentName);
++            }
++            android.content.pm.PackageManager pm = this.reactContext.getPackageManager();
++            pm.setComponentEnabledSetting(componentName, android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED, android.content.pm.PackageManager.DONT_KILL_APP);
++            pm.setComponentEnabledSetting(componentName, android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED, android.content.pm.PackageManager.DONT_KILL_APP);
++            promise.resolve(true);
++        } catch (Exception e) {
++            promise.reject("REBIND_ERROR", e.getMessage());
++        }
++    }
+ }

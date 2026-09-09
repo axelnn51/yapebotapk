@@ -86,6 +86,22 @@ module.exports = function withNotificationService(config) {
       });
     }
 
+    // 4. Firebase default notification channel ID meta-data (CRÍTICO para Android 13+)
+    if (!app['meta-data']) {
+      app['meta-data'] = [];
+    }
+    const hasDefaultChannel = app['meta-data'].some(
+      (m) => m.$['android:name'] === 'com.google.firebase.messaging.default_notification_channel_id'
+    );
+    if (!hasDefaultChannel) {
+      app['meta-data'].push({
+        $: {
+          'android:name': 'com.google.firebase.messaging.default_notification_channel_id',
+          'android:value': 'default',
+        }
+      });
+    }
+
     return config;
   });
 };

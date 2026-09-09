@@ -194,6 +194,8 @@ export const api = {
         const deviceToken = await Notifications.getDevicePushTokenAsync();
         const fcmToken = deviceToken.data;
         await apiRequest('/push-token', 'POST', { token: fcmToken, type: 'fcm' });
+        await AsyncStorage.setItem('@yape_fcm_token', fcmToken);
+        await AsyncStorage.setItem('@yape_push_token_type', 'fcm');
         console.log('Push: FCM device token registrado:', fcmToken.substring(0, 20) + '...');
         return fcmToken;
       } catch (fcmErr) {
@@ -205,6 +207,8 @@ export const api = {
         const projectId = '44fc55a5-cf96-4905-9e8e-c030d393ac41';
         const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
         await apiRequest('/push-token', 'POST', { token, type: 'expo' });
+        await AsyncStorage.setItem('@yape_fcm_token', token);
+        await AsyncStorage.setItem('@yape_push_token_type', 'expo');
         console.log('Push: Expo token registrado');
         return token;
       } catch (expoErr) {
@@ -217,6 +221,58 @@ export const api = {
     }
   },
   testPushNotification: () => apiRequest('/test-push', 'POST'),
+
+  // Control nativo de NotificationListener (para Xiaomi POCO M5s)
+  rebindListener: async () => {
+    try {
+      const { NativeModules } = require('react-native');
+      const mod = NativeModules.RNAndroidNotificationListener;
+      if (mod && typeof mod.rebindListener === 'function') {
+        return await mod.rebindListener();
+      }
+      return false;
+    } catch (e) {
+      console.warn('Error en rebindListener:', e.message);
+      return false;
+    }
+  },
+
+  isListenerConnected: async () => {
+    try {
+      const { NativeModules } = require('react-native');
+      const mod = NativeModules.RNAndroidNotificationListener;
+      if (mod && typeof mod.isServiceConnected === 'function') {
+        return await mod.isServiceConnected();
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  getPermissionStatus: async () => {
+    try {
+      const { NativeModules } = require('react-native');
+      const mod = NativeModules.RNAndroidNotificationListener;
+      if (mod && typeof mod.getPermissionStatus === 'function') {
+        const status = await mod.getPermissionStatus();
+        return status !== 'denied';
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  requestListenerPermission: () => {
+    try {
+      const { NativeModules } = require('react-native');
+      const mod = NativeModules.RNAndroidNotificationListener;
+      if (mod && typeof mod.requestPermission === 'function') {
+        mod.requestPermission();
+      }
+    } catch (e) {}
+  },
 
   // Dashboard
   getDashboard: () => apiRequest('/dashboard'),

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "143189171060",
+    "project_id": "yapebot-a216e",
+    "storage_bucket": "yapebot-a216e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:143189171060:android:31c5ac5debb5d17e74aa21",
+        "android_client_info": {
+          "package_name": "com.yape.dashboard"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyASPwGfkGDo5R9XI8yPimekSlKPLWwCQJk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

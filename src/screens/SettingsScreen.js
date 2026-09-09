@@ -507,6 +507,18 @@ export default function SettingsScreen({ navigation }) {
           )}
         </View>
 
+        {/* --- SECCIÓN DIAGNÓSTICO DEL SISTEMA --- */}
+        <TouchableOpacity style={[s.card, {borderColor: Colors.primary + '60', backgroundColor: '#141026'}]} onPress={() => navigation.navigate('Diagnostic')}>
+          <View style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between'}}>
+            <View style={{flexDirection:'row', alignItems:'center', gap:8}}>
+              <Ionicons name="hardware-chip" size={22} color={Colors.primaryLight} />
+              <Text style={[s.label, {color: Colors.primaryLight, fontWeight:'800'}]}>🩺 Diagnóstico y Monitor en Vivo</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={Colors.primaryLight} />
+          </View>
+          <Text style={[s.hint, {marginTop:4}]}>Estado de Yape/Plin, FCM Push, Cola Offline, Reconexión Xiaomi y eventos en tiempo real.</Text>
+        </TouchableOpacity>
+
         {/* --- SECCIÓN LOGS --- */}
         <TouchableOpacity style={s.card} onPress={() => navigation.navigate('Logs')}>
           <View style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between'}}>

@@ -11,4 +11,5 @@
 -keep class com.swmansion.reanimated.** { *; }
 -keep class com.facebook.react.turbomodule.** { *; }
 
-# Add any project specific keep options here:
+# react-native-android-notification-listener
+-keep class com.lesimoes.androidnotificationlistener.** { *; }

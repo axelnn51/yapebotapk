@@ -211,14 +211,20 @@ export default function DashboardScreen({ navigation }) {
       <View style={styles.actionsRow}>
         <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('Pedidos')}>
           <LinearGradient colors={['rgba(245,158,11,0.2)', 'rgba(245,158,11,0.05)']} style={styles.actionGradient}>
-            <Ionicons name="list" size={28} color={Colors.warning} />
-            <Text style={styles.actionLabel}>Ver Pedidos</Text>
+            <Ionicons name="list" size={24} color={Colors.warning} />
+            <Text style={styles.actionLabel}>Pedidos</Text>
           </LinearGradient>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('Reportes')}>
           <LinearGradient colors={['rgba(59,130,246,0.2)', 'rgba(59,130,246,0.05)']} style={styles.actionGradient}>
-            <Ionicons name="bar-chart" size={28} color={Colors.info} />
+            <Ionicons name="bar-chart" size={24} color={Colors.info} />
             <Text style={styles.actionLabel}>Reportes</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('Config', { screen: 'Diagnostic' })}>
+          <LinearGradient colors={['rgba(124,58,237,0.25)', 'rgba(124,58,237,0.05)']} style={styles.actionGradient}>
+            <Ionicons name="hardware-chip" size={24} color={Colors.primaryLight} />
+            <Text style={styles.actionLabel}>Diagnóstico</Text>
           </LinearGradient>
         </TouchableOpacity>
       </View>

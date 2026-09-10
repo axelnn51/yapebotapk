@@ -90,9 +90,46 @@ export function detectProvider(packageName = '', text = '') {
  * @returns {boolean}
  */
 export function isMonitoredApp(packageName = '', text = '') {
-  const pkg = (packageName || '').toLowerCase();
+  const pkg = (packageName || '').toLowerCase().trim();
   const txt = (text || '').toLowerCase();
 
+  // 1. RECHAZAR CATEGÓRICAMENTE NUESTRA PROPIA APP (ANTI-BUCLE INFINITO)
+  if (
+    pkg === 'com.yape.dashboard' ||
+    pkg.includes('yape.dashboard') ||
+    pkg.includes('com.yape') ||
+    pkg.includes('host.exp.exponent')
+  ) {
+    return false;
+  }
+
+  // 2. RECHAZAR APPS DE MENSAJERÍA O COMUNICACIÓN
+  const ignoredPackages = [
+    'org.telegram.messenger',
+    'org.thunderdog.challegram',
+    'com.whatsapp',
+    'com.whatsapp.w4b',
+    'com.google.android.gm',
+    'com.google.android.apps.messaging',
+  ];
+  if (ignoredPackages.some(p => pkg.startsWith(p))) {
+    return false;
+  }
+
+  // 3. RECHAZAR CUALQUIER NOTIFICACIÓN QUE CONTENGA TEXTO DEL SISTEMA YAPEBOT O TIENDA
+  if (
+    txt.includes('pedido #') ||
+    txt.includes('nuevo pedido') ||
+    txt.includes('revisión manual') ||
+    txt.includes('verificado') ||
+    txt.includes('yape dashboard') ||
+    txt.includes('directo') ||
+    txt.includes('woocommerce')
+  ) {
+    return false;
+  }
+
+  // 4. SOLO ACEPTAR PAQUETES BANCARIOS OFICIALES
   const allKnownPackages = [
     ...BANK_PACKAGES.YAPE,
     ...BANK_PACKAGES.INTERBANK,
@@ -100,18 +137,9 @@ export function isMonitoredApp(packageName = '', text = '') {
     ...BANK_PACKAGES.SCOTIABANK,
   ];
 
-  if (allKnownPackages.includes(pkg)) return true;
-
-  // Permisivo: si el package o el texto menciona yape, plin, bbva o interbank
-  if (pkg.includes('yape') || pkg.includes('plin') || pkg.includes('bbva') || pkg.includes('interbank')) {
-    return true;
-  }
-  if (txt.includes('yape') || txt.includes('plin')) {
-    return true;
-  }
-
-  return false;
+  return allKnownPackages.includes(pkg);
 }
+
 
 /**
  * Parsea el texto completo para determinar si es un pago y extraer sus componentes
@@ -186,10 +214,12 @@ export function parseBankNotification(rawNotification) {
   // Debe tener un monto y al menos una palabra clave de recepción/pago
   const fullLower = fullText.toLowerCase();
   const paymentKeywords = [
-    'envi', 'recib', 'pago', 'yape', 'plin', 'transferencia', 'deposito', 'depósito', 'abono'
+    'te envió', 'te envio', 'te yapeó', 'te yapeo', 'recibiste', 'te transfirió', 'te transfirio', 'abono', 'depósito', 'deposito'
   ];
+  const isSystemNotification = fullLower.includes('pedido #') || fullLower.includes('nuevo pedido') || fullLower.includes('completado') || fullLower.includes('dashboard') || fullLower.includes('tienda');
   const hasPaymentKeyword = paymentKeywords.some(kw => fullLower.includes(kw));
-  const isPayment = amount !== null && amount > 0 && hasPaymentKeyword;
+  const isPayment = amount !== null && amount > 0 && hasPaymentKeyword && !isSystemNotification;
+
 
   // 5. Generar texto limpio para el backend
   // Si rawNotification tiene bigText o text, preferir el más largo

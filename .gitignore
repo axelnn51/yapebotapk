@@ -14,3 +14,4 @@ build_log.txt
 *.log
 *.apk
 PRUEBAS/
+*.traineddata

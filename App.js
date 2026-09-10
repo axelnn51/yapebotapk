@@ -15,7 +15,7 @@ import SettingsScreen from './src/screens/SettingsScreen';
 import LogsScreen from './src/screens/LogsScreen';
 import { api } from './src/services/api';
 import * as Notifications from 'expo-notifications';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, AppState } from 'react-native';
 
 // ============================================================
 // Error Boundary — Captura crashes de React y muestra pantalla de recuperación
@@ -122,10 +122,25 @@ function SettingsStack() {
 
 export default function App() {
   React.useEffect(() => {
-    // Registrar Push Token al iniciar
+    // 1. Inicializar canal de notificaciones Android incondicionalmente
+    api.setupNotificationChannel().catch(console.warn);
+
+    // 2. Registrar Push Token al iniciar
     api.registerPushToken().catch(console.warn);
 
-    // Escuchar notificaciones Push recibidas (Foreground / Background)
+    // 3. Listener para reintentar sincronización si la app vuelve a primer plano
+    const appStateSub = AppState.addEventListener('change', nextState => {
+      if (nextState === 'active') {
+        api.registerPushToken().catch(() => {});
+      }
+    });
+
+    // 4. Listener si el token FCM es renovado por el sistema
+    const tokenSub = Notifications.addPushTokenListener(() => {
+      api.registerPushToken().catch(() => {});
+    });
+
+    // 5. Escuchar notificaciones Push recibidas (Foreground / Background)
     const receivedSub = Notifications.addNotificationReceivedListener(notification => {
       const content = notification.request.content;
       AsyncStorage.setItem('@yape_last_push_received', new Date().toISOString()).catch(() => {});
@@ -137,7 +152,7 @@ export default function App() {
       ).catch(() => {});
     });
 
-    // Escuchar cuando el usuario toca la notificación
+    // 6. Escuchar cuando el usuario toca la notificación
     const responseSub = Notifications.addNotificationResponseReceivedListener(response => {
       const data = response.notification.request.content.data;
       if (data?.orderId && navigationRef.current) {
@@ -149,6 +164,8 @@ export default function App() {
     });
 
     return () => {
+      appStateSub.remove();
+      tokenSub.remove();
       receivedSub.remove();
       responseSub.remove();
     };

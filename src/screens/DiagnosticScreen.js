@@ -15,6 +15,7 @@ import { api, getConfig } from '../services/api';
 import { getEvents, clearEvents, logEvent, EVENT_TYPES } from '../services/eventLogger';
 import { getQueue, flushQueue, clearQueue } from '../services/notificationQueue';
 import * as Notifications from 'expo-notifications';
+import * as Device from 'expo-device';
 
 export default function DiagnosticScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
@@ -48,6 +49,8 @@ export default function DiagnosticScreen({ navigation }) {
   const [fcmTokenType, setFcmTokenType] = useState('fcm');
   const [lastPushReceived, setLastPushReceived] = useState(null);
   const [testingPush, setTestingPush] = useState(false);
+  const [pushDiag, setPushDiag] = useState(null);
+  const [backendPushStatus, setBackendPushStatus] = useState(null);
 
   // Eventos en vivo
   const [events, setEvents] = useState([]);
@@ -102,14 +105,21 @@ export default function DiagnosticScreen({ navigation }) {
       const countStr = await AsyncStorage.getItem('@yape_notification_count');
       if (countStr) setReadCount(parseInt(countStr, 10));
 
-      // 4. Push FCM
-      const token = await AsyncStorage.getItem('@yape_fcm_token');
-      setFcmToken(token);
-      const tokenType = await AsyncStorage.getItem('@yape_push_token_type');
-      if (tokenType) setFcmTokenType(tokenType);
+      // 4. Push FCM & Diagnóstico Consolidado
+      const pDiag = await api.getPushDiagnosticStatus();
+      setPushDiag(pDiag);
+      setFcmToken(pDiag.fcmToken);
+      if (pDiag.tokenType) setFcmTokenType(pDiag.tokenType);
+      if (pDiag.lastPushReceived) setLastPushReceived(pDiag.lastPushReceived);
 
-      const pushRecStr = await AsyncStorage.getItem('@yape_last_push_received');
-      if (pushRecStr) setLastPushReceived(pushRecStr);
+      if (cfg.url) {
+        try {
+          const bStatus = await api.getPushStatus();
+          setBackendPushStatus(bStatus);
+        } catch (e) {
+          setBackendPushStatus({ ok: false, error: e.message });
+        }
+      }
 
       // 5. Cola Offline
       const q = await getQueue();
@@ -200,12 +210,12 @@ export default function DiagnosticScreen({ navigation }) {
     try {
       await logEvent('FCM', 'Solicitando push de prueba al backend', '', EVENT_TYPES.BACKEND_SENDING);
       const result = await api.testPushNotification();
-      await logEvent('FCM', 'Push de prueba emitido por servidor', `Enviado a ${result.sent_to} token(s)`, EVENT_TYPES.BACKEND_SUCCESS);
-      Alert.alert('✅ Push Solicitado', `El servidor envió la notificación FCM a ${result.sent_to} dispositivo(s). Debería sonar y aparecer en tu barra superior.`);
+      await logEvent('FCM', 'Push de prueba emitido por servidor', `Enviado a ${result.sent_to || 1} token(s)`, EVENT_TYPES.BACKEND_SUCCESS);
+      Alert.alert('✅ Push Despachado', `El servidor despachó la notificación FCM a ${result.sent_to || 1} dispositivo(s). Debería sonar y aparecer en la barra de notificaciones.`);
       loadAllData();
     } catch (e) {
       await logEvent('FCM', 'Error en prueba push', e.message, EVENT_TYPES.BACKEND_ERROR);
-      Alert.alert('❌ Error Push', e.message);
+      Alert.alert('❌ Error al probar Push', e.message);
     } finally {
       setTestingPush(false);
     }
@@ -214,13 +224,22 @@ export default function DiagnosticScreen({ navigation }) {
   // Re-registrar token push
   const handleRegisterTokenAgain = async () => {
     try {
-      const token = await api.registerPushToken();
-      if (token) {
-        Alert.alert('✅ Token Registrado', `Token: ${token.substring(0, 25)}...`);
-        loadAllData();
+      const reg = await api.registerPushToken();
+      if (reg && reg.status === 'registered') {
+        Alert.alert('✅ Token Registrado', `Token FCM sincronizado exitosamente con el servidor.
+(${reg.token.substring(0, 16)}...)`);
+      } else if (reg && reg.status === 'pending_config') {
+        Alert.alert('🟡 Servidor Requerido', 'Token FCM generado localmente, pero debes ingresar la URL y API Key en la pestaña Configuración.');
+      } else if (reg && reg.status === 'permission_denied') {
+        Alert.alert('🟠 Permiso Requerido', 'Debes conceder permisos de notificación en los Ajustes de Android.');
+      } else if (reg && reg.status === 'sync_error') {
+        Alert.alert('🔴 Error de Conexión', `Fallo al sincronizar con el servidor: ${reg.error || 'Error de red'}`);
+      } else if (reg && reg.status === 'firebase_error') {
+        Alert.alert('🔴 Error FCM', `Google Play Services o Firebase fallaron: ${reg.error}`);
       } else {
-        Alert.alert('⚠️ Permiso Requerido', 'Concede permisos de notificación en los ajustes de Android.');
+        Alert.alert('ℹ️ Estado', reg?.error || 'Token procesado.');
       }
+      loadAllData();
     } catch (e) {
       Alert.alert('Error', e.message);
     }
@@ -399,51 +418,89 @@ export default function DiagnosticScreen({ navigation }) {
         </View>
       </View>
 
-      {/* BLOQUE 3: NOTIFICACIONES PUSH (FCM) */}
+      {/* BLOQUE 3: NOTIFICACIONES PUSH (FCM NATIVO) */}
       <View style={st.card}>
         <View style={st.cardHeaderRow}>
           <View style={{flexDirection:'row', alignItems:'center', gap:8}}>
             <Ionicons name="notifications" size={20} color="#3b82f6" />
             <Text style={st.cardTitle}>PUSH (Notificaciones de Tienda)</Text>
           </View>
+          <View style={[st.badge, {
+            backgroundColor: pushDiag?.badge?.code === 'green' ? Colors.success 
+              : pushDiag?.badge?.code === 'yellow' ? Colors.warning 
+              : pushDiag?.badge?.code === 'orange' ? '#f97316' 
+              : Colors.danger
+          }]}>
+            <Text style={st.badgeText}>{pushDiag?.badge?.text || 'Verificando...'}</Text>
+          </View>
         </View>
 
+        {/* Estado Detallado */}
         <View style={st.timesBox}>
           <View style={st.timeRow}>
-            <Text style={st.timeLabel}>FCM:</Text>
-            <Text style={[st.timeValue, { color: fcmToken ? Colors.success : Colors.danger, fontWeight:'700' }]}>
-              {fcmToken ? 'Activo' : 'Error'}
+            <Text style={st.timeLabel}>Permiso Android:</Text>
+            <Text style={[st.timeValue, { color: pushDiag?.permissions?.status === 'granted' ? Colors.success : '#f97316' }]}>
+              {pushDiag?.permissions?.status === 'granted' ? '🟢 Concedido' : '🟠 Denegado'}
+            </Text>
+          </View>
+          <View style={st.timeRow}>
+            <Text style={st.timeLabel}>Canal Android ('default'):</Text>
+            <Text style={[st.timeValue, { color: pushDiag?.channel ? (pushDiag.channel.importance === 0 ? '#f97316' : Colors.success) : Colors.success }]}>
+              {pushDiag?.channel ? (pushDiag.channel.importance === 0 ? '🟠 Silenciado' : '🟢 Alta Prioridad + Sonido') : '🟢 Creado (default)'}
+            </Text>
+          </View>
+          <View style={st.timeRow}>
+            <Text style={st.timeLabel}>Backend Firebase:</Text>
+            <Text style={[st.timeValue, { color: backendPushStatus?.firebase_initialized ? Colors.success : (backendPushStatus ? Colors.danger : Colors.textMuted) }]}>
+              {backendPushStatus?.firebase_initialized ? `🟢 Listo (${backendPushStatus.firebase_loaded_from || 'FCM'})` : (backendPushStatus ? '🔴 Inactivo' : '⚪ Desconectado')}
+            </Text>
+          </View>
+          <View style={st.timeRow}>
+            <Text style={st.timeLabel}>Dispositivos en Servidor:</Text>
+            <Text style={[st.timeValue, { color: backendPushStatus?.active_tokens > 0 ? Colors.success : Colors.textSecondary }]}>
+              {backendPushStatus?.active_tokens != null ? `${backendPushStatus.active_tokens} activo(s)` : '--'}
             </Text>
           </View>
           <View style={st.timeRow}>
             <Text style={st.timeLabel}>Último Push recibido:</Text>
             <Text style={[st.timeValue, { color: Colors.info }]}>{formatTimeOnly(lastPushReceived)}</Text>
           </View>
+          <View style={st.timeRow}>
+            <Text style={st.timeLabel}>Último Registro:</Text>
+            <Text style={[st.timeValue, { color: Colors.textSecondary }]}>{formatTimeOnly(pushDiag?.registeredAt)}</Text>
+          </View>
         </View>
 
-        <View style={st.statusGrid}>
-          <View style={st.statusItem}>
-            <View style={[st.dot, { backgroundColor: fcmToken ? Colors.success : Colors.danger }]} />
-            <Text style={st.statusLabel}>Token Registrado:</Text>
-            <Text style={[st.statusVal, { color: fcmToken ? Colors.success : Colors.danger }]}>
-              {fcmToken ? '🟢 Activo (' + fcmTokenType.toUpperCase() + ')' : '🔴 No Registrado'}
+        {/* Banner de error técnico visible si existe */}
+        {(pushDiag?.lastError || backendPushStatus?.last_error) && (
+          <View style={[st.debugBox, { borderColor: '#ef444460', backgroundColor: '#ef444415', marginTop: Spacing.xs }]}>
+            <Text style={[st.debugTitle, { color: '#ef4444' }]}>⚠️ Diagnóstico Técnico:</Text>
+            <Text style={[st.debugText, { color: '#f87171' }]}>
+              {pushDiag?.lastError || backendPushStatus?.last_error}
             </Text>
           </View>
-          <View style={st.statusItem}>
-            <Text style={st.statusLabel}>Último Push Recibido:</Text>
-            <Text style={[st.statusVal, { color: Colors.info }]}>{formatTimeOnly(lastPushReceived)}</Text>
-          </View>
-        </View>
+        )}
 
-        {fcmToken ? (
+        {/* Token FCM Enmascarado */}
+        {pushDiag?.fcmToken ? (
           <TouchableOpacity style={st.tokenBox} onPress={copyFcmToken}>
-            <Text style={st.tokenText} numberOfLines={1}>Token: {fcmToken}</Text>
-            <Text style={st.tokenHint}>Toca para copiar token</Text>
+            <Text style={st.tokenText} numberOfLines={1}>
+              Token: {pushDiag.maskedToken}
+            </Text>
+            <Text style={st.tokenHint}>Toca para copiar token completo ({pushDiag.tokenType.toUpperCase()})</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity style={st.actionBtn} onPress={handleRegisterTokenAgain}>
             <Ionicons name="key" size={16} color="#fff" />
-            <Text style={st.actionBtnText}>Registrar Token Push con Servidor</Text>
+            <Text style={st.actionBtnText}>Obtener y Vincular Token FCM</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Botón de re-registro si no está registrado */}
+        {pushDiag?.status !== 'registered' && pushDiag?.fcmToken && (
+          <TouchableOpacity style={[st.actionBtn, { backgroundColor: Colors.warning, marginTop: Spacing.xs }]} onPress={handleRegisterTokenAgain}>
+            <Ionicons name="refresh" size={16} color="#000" />
+            <Text style={[st.actionBtnText, { color: '#000' }]}>Sincronizar Token Pendiente con Servidor</Text>
           </TouchableOpacity>
         )}
 
@@ -459,7 +516,7 @@ export default function DiagnosticScreen({ navigation }) {
             </>
           )}
         </TouchableOpacity>
-        <Text style={st.hintText}>Prueba el flujo completo: Backend → FCM → Android → APK (con sonido y alerta)</Text>
+        <Text style={st.hintText}>Flujo end-to-end: Servidor → FCM Admin SDK → Android → APK (con sonido y alerta)</Text>
       </View>
 
       {/* BLOQUE 4: REGISTRO DE EVENTOS EN VIVO */}

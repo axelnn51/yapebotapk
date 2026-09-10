@@ -176,11 +176,18 @@ export default function SettingsScreen({ navigation }) {
     setSaving(true);
     try {
       await saveConfig(serverUrl.trim(), apiKey.trim());
-      const token = await api.registerPushToken();
-      if (token) {
-        Alert.alert('✅ Configuración Guardada', 'Push Token registrado correctamente.');
+      const regResult = await api.registerPushToken();
+      
+      if (regResult && regResult.status === 'registered') {
+        Alert.alert('✅ Configuración Guardada', 'Servidor configurado y Push Token registrado correctamente.');
+      } else if (regResult && regResult.status === 'permission_denied') {
+        Alert.alert('⚠️ Permiso Requerido', 'Configuración guardada, pero debes conceder permisos de notificación en Android.');
+      } else if (regResult && regResult.status === 'sync_error') {
+        Alert.alert('⚠️ Configuración Guardada', `Servidor guardado, pero falló la sincronización del token: ${regResult.error || 'Error de red'}. Se reintentará automáticamente.`);
+      } else if (regResult && regResult.status === 'firebase_error') {
+        Alert.alert('⚠️ Firebase no disponible', `Configuración guardada. FCM reportó: ${regResult.error || 'Fallo de Play Services'}.`);
       } else {
-        Alert.alert('✅ Configuración Guardada', 'Conexión configurada. Las notificaciones push no están disponibles (requiere Firebase), pero el lector de notificaciones de Yape funciona normalmente.');
+        Alert.alert('✅ Configuración Guardada', 'Conexión configurada correctamente.');
       }
     } catch (e) { Alert.alert('Error', e.message); }
     finally { setSaving(false); }
@@ -262,13 +269,9 @@ export default function SettingsScreen({ navigation }) {
     setTestingRealPush(true);
     try {
       const result = await api.testPushNotification();
-      Alert.alert('✅ Notificación Enviada', `Se envió a ${result.sent_to} dispositivo(s).`);
+      Alert.alert('✅ Notificación Enviada', `El servidor envió la notificación FCM a ${result.sent_to || 1} dispositivo(s). Debería sonar y mostrarse en tu barra de estado.`);
     } catch (e) {
-      if (e.message && e.message.includes('No tokens')) {
-        Alert.alert('ℹ️ Push No Disponible', 'Las notificaciones Push requieren configuración de Firebase (google-services.json). Sin embargo, el lector de notificaciones de Yape funciona perfectamente sin esto.');
-      } else {
-        Alert.alert('❌ Error Push', e.message);
-      }
+      Alert.alert('❌ Error Push', e.message);
     } finally {
       setTestingRealPush(false);
     }

@@ -96,3 +96,16 @@ En `src/services/api.js` (`testConnection` y `apiRequest`) y `DiagnosticScreen.j
 | `app.json` | Versión `3.2.1`, versionCode `6` |
 | `android/app/build.gradle` | Versión `3.2.1`, versionCode `6` |
 | `../YapeBot/Dockerfile` | Añadido `COPY services/ ./services/` (Backend en GitHub `origin/main`) |
+
+---
+
+## 4. Binarios de Release APK Generados
+
+- **Archivo Principal en Escritorio:** `C:\Users\axeln\OneDrive\Desktop\YapeBot-Mobile-v3.2.1.apk`
+- **Archivo Actualizado:** `C:\Users\axeln\OneDrive\Desktop\YapeBot-Mobile-ULTIMA.apk`
+- **Tamaño:** 59,334,254 bytes (~56.59 MB)
+- **Firma:** `APK Signature Scheme v2: true` (Verificada con `apksigner`)
+- **Package:** `com.yape.dashboard`
+- **Versión:** `3.2.1` (versionCode: `6`)
+- **Compilación:** `BUILD SUCCESSFUL in 2m 14s` (1179 tareas de Gradle)
+

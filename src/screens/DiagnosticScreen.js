@@ -193,7 +193,12 @@ export default function DiagnosticScreen({ navigation }) {
           }),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return await res.json();
+        const text = await res.text();
+        try {
+          return JSON.parse(text);
+        } catch (e) {
+          return { ok: true };
+        }
       });
       Alert.alert('✅ Cola Procesada', `${result.processed} elemento(s) enviado(s). Quedan: ${result.remaining}`);
       loadAllData();

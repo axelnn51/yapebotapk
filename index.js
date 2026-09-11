@@ -43,11 +43,18 @@ const sendToBackend = async (parsed) => {
 
     clearTimeout(timeout);
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    const text = await response.text();
+    let result;
+    try {
+      result = JSON.parse(text);
+    } catch (parseErr) {
+      throw new Error(`HTTP ${response.status}: ${text.substring(0, 60)}`);
     }
 
-    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result.error || `HTTP ${response.status}: ${response.statusText}`);
+    }
+
     return result;
   } catch (e) {
     clearTimeout(timeout);
@@ -86,6 +93,7 @@ const headlessNotificationListener = async ({ notification }) => {
       text: (notif.text || '').substring(0, 200),
       bigText: (notif.bigText || '').substring(0, 200),
       fullText: fullText.substring(0, 300),
+      passed_filter: 'pending',
     };
 
     // Guardar último raw para diagnóstico inmediato
@@ -103,6 +111,12 @@ const headlessNotificationListener = async ({ notification }) => {
 
     // 4. Verificar si es una app bancaria monitoreada
     if (!isMonitoredApp(app, fullText)) {
+      rawRecord.passed_filter = false;
+      rawRecord.reason = 'App no bancaria';
+      try {
+        await AsyncStorage.setItem('@yape_debug_last_raw', JSON.stringify(rawRecord));
+      } catch (e) { /* ignore */ }
+
       await logEvent(
         'FILTRO',
         'App no monitoreada (ignorada)',
@@ -122,6 +136,12 @@ const headlessNotificationListener = async ({ notification }) => {
 
     // 6. Verificar si es un pago real
     if (!parsed.isPayment) {
+      rawRecord.passed_filter = false;
+      rawRecord.reason = 'No es pago';
+      try {
+        await AsyncStorage.setItem('@yape_debug_last_raw', JSON.stringify(rawRecord));
+      } catch (e) { /* ignore */ }
+
       await logEvent(
         parsed.provider,
         'Notificación no corresponde a pago',
@@ -141,6 +161,12 @@ const headlessNotificationListener = async ({ notification }) => {
     }
 
     // 7. Es un pago bancario válido -> Encolar e intentar envío
+    rawRecord.passed_filter = true;
+    rawRecord.reason = `Pago S/ ${parsed.amount}`;
+    try {
+      await AsyncStorage.setItem('@yape_debug_last_raw', JSON.stringify(rawRecord));
+    } catch (e) { /* ignore */ }
+
     await logEvent(
       parsed.provider,
       `💰 Pago detectado S/ ${parsed.amount}`,

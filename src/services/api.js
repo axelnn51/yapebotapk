@@ -150,7 +150,25 @@ async function apiRequest(endpoint, method = 'GET', body = null) {
         throw new Error('API Key inválida. Verifica en Configuración.');
       }
 
-      const data = await response.json();
+      const text = await response.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (jsonErr) {
+        if (!response.ok) {
+          if (response.status === 521) throw new Error('Servidor caído (Cloudflare 521). Revisa el contenedor Docker.');
+          if (response.status === 502) throw new Error('Bad Gateway (502). El backend no responde.');
+          if (response.status === 504) throw new Error('Gateway Timeout (504). El backend tardó demasiado.');
+          if (response.status === 404) throw new Error(`Ruta /api${endpoint} no encontrada (404).`);
+          throw new Error(`Error del servidor (${response.status}): ${text.substring(0, 60).trim()}`);
+        }
+        throw new Error(`Respuesta inválida del servidor (no JSON): ${text.substring(0, 60).trim()}`);
+      }
+
+      if (!response.ok && !data.ok) {
+        throw new Error(data.error || `Error HTTP ${response.status}`);
+      }
+
       if (!data.ok && data.error) throw new Error(data.error);
 
       // Guardar en caché si es GET
@@ -481,7 +499,21 @@ export const api = {
     try {
       const res = await fetch(`${url}/health`, { signal: controller.signal });
       clearTimeout(timeout);
-      const data = await res.json();
+
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (jsonErr) {
+        if (!res.ok) {
+          if (res.status === 521) return { ok: false, error: 'Servidor caído (Cloudflare 521). Revisa Docker.' };
+          if (res.status === 502) return { ok: false, error: 'Bad Gateway (502). Backend no responde.' };
+          if (res.status === 504) return { ok: false, error: 'Timeout del Gateway (504).' };
+          return { ok: false, error: `Error HTTP ${res.status}: ${text.substring(0, 60).trim()}` };
+        }
+        return { ok: false, error: `Respuesta no es JSON: ${text.substring(0, 60).trim()}` };
+      }
+
       return { ok: data.status === 'ok', data };
     } catch (e) {
       clearTimeout(timeout);

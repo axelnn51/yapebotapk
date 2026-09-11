@@ -386,8 +386,8 @@ export default function SettingsScreen({ navigation }) {
                   <Text style={{color:Colors.textSecondary, fontSize:10}}>App: {debugRaw.app || '?'}</Text>
                   <Text style={{color:Colors.textSecondary, fontSize:10}}>Title: {debugRaw.title || '?'}</Text>
                   <Text style={{color:Colors.textSecondary, fontSize:10}}>Text: {debugRaw.text || '?'}</Text>
-                  <Text style={{color: debugRaw.passed_filter === false ? Colors.danger : Colors.success, fontSize:10, fontWeight:'700', marginTop:2}}>
-                    Filtro: {debugRaw.passed_filter === false ? `❌ FILTRADO (${debugRaw.reason})` : debugRaw.passed_filter === 'pending' ? '⏳ Procesando...' : '✅ Pasó'}
+                  <Text style={{color: debugRaw.passed_filter === false ? Colors.danger : debugRaw.passed_filter === true ? Colors.success : '#f59e0b', fontSize:10, fontWeight:'700', marginTop:2}}>
+                    Filtro: {debugRaw.passed_filter === false ? `❌ FILTRADO (${debugRaw.reason || 'Descartado'})` : debugRaw.passed_filter === true ? `✅ Pasó (${debugRaw.reason || 'Pago válido'})` : '⏳ Procesando...'}
                   </Text>
                   <Text style={{color:Colors.textMuted, fontSize:9}}>{debugRaw.time ? new Date(debugRaw.time).toLocaleTimeString('es-PE') : ''}</Text>
                 </View>

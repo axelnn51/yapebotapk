@@ -14,6 +14,7 @@ import ReportsScreen from './src/screens/ReportsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import LogsScreen from './src/screens/LogsScreen';
 import { api } from './src/services/api';
+import { startHeartbeat, stopHeartbeat } from './src/services/heartbeatService';
 import * as Notifications from 'expo-notifications';
 import { View, Text, TouchableOpacity, StyleSheet, AppState } from 'react-native';
 
@@ -163,7 +164,11 @@ export default function App() {
       }
     });
 
+    // 7. Iniciar Heartbeat de monitorización periódica (cada 2 minutos)
+    startHeartbeat(120000);
+
     return () => {
+      stopHeartbeat();
       appStateSub.remove();
       tokenSub.remove();
       receivedSub.remove();

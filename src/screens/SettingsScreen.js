@@ -9,6 +9,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, Spacing, FontSize, BorderRadius } from '../theme/colors';
 import { getConfig, saveConfig, api } from '../services/api';
+import { openAutoStartSettings, openBatteryOptimizationSettings, openAppDetailsSettings } from '../services/deviceSettings';
+import { sendHeartbeat, getHeartbeatStatus } from '../services/heartbeatService';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
@@ -128,6 +130,8 @@ export default function SettingsScreen({ navigation }) {
   const [notifCount, setNotifCount] = useState(0);
   const [heartbeat, setHeartbeat] = useState(null);
   const [debugRaw, setDebugRaw] = useState(null);
+  const [testingHeartbeat, setTestingHeartbeat] = useState(false);
+  const [heartbeatResult, setHeartbeatResult] = useState(null);
 
   useEffect(() => { 
     loadConfig(); 
@@ -395,6 +399,76 @@ export default function SettingsScreen({ navigation }) {
             </View>
           )}
           <Text style={s.hint}>⚠️ Recuerda quitar la optimización de batería de Android para que la app no se cierre.</Text>
+        </View>
+
+        {/* --- SECCIÓN OPTIMIZACIÓN XIAOMI / HYPEROS --- */}
+        <View style={s.card}>
+          <View style={{flexDirection:'row', alignItems:'center', gap:8, marginBottom:Spacing.sm}}>
+            <Ionicons name="flash" size={20} color="#f59e0b" />
+            <Text style={s.label}>Optimizaciones Xiaomi / HyperOS</Text>
+          </View>
+          <Text style={{color: Colors.textSecondary, fontSize: FontSize.xs, marginBottom: Spacing.md, lineHeight: 18}}>
+            Para que tu Xiaomi POCO M5s no congele el lector al apagar la pantalla:
+          </Text>
+
+          <View style={{gap: 10}}>
+            <TouchableOpacity
+              style={[s.permissionBtn, {backgroundColor: '#7c3aed'}]}
+              onPress={async () => {
+                Haptics.selectionAsync();
+                await openAutoStartSettings();
+              }}
+            >
+              <Text style={s.permissionTxt}>🚀 1. Abrir Inicio Automático (MIUI / HyperOS)</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[s.permissionBtn, {backgroundColor: '#0284c7'}]}
+              onPress={async () => {
+                Haptics.selectionAsync();
+                await openBatteryOptimizationSettings();
+              }}
+            >
+              <Text style={s.permissionTxt}>🔋 2. Quitar Restricciones de Batería</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[s.permissionBtn, {backgroundColor: '#334155'}]}
+              onPress={async () => {
+                Haptics.selectionAsync();
+                await openAppDetailsSettings();
+              }}
+            >
+              <Text style={s.permissionTxt}>⚙️ 3. Ajustes de la App (Permisos Restringidos)</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Heartbeat Status & Trigger */}
+          <View style={{marginTop: Spacing.md, borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: Spacing.md}}>
+            <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8}}>
+              <Text style={{color: Colors.text, fontSize: FontSize.xs, fontWeight: '700'}}>💓 Latido Backend (Heartbeat)</Text>
+              <TouchableOpacity
+                style={{backgroundColor: '#7c3aed20', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: '#7c3aed60'}}
+                disabled={testingHeartbeat}
+                onPress={async () => {
+                  setTestingHeartbeat(true);
+                  Haptics.selectionAsync();
+                  const res = await sendHeartbeat();
+                  setHeartbeatResult(res);
+                  setTestingHeartbeat(false);
+                }}
+              >
+                <Text style={{color: Colors.primaryLight, fontSize: 11, fontWeight: '700'}}>
+                  {testingHeartbeat ? 'Enviando...' : 'Enviar Ping'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            {heartbeatResult && (
+              <Text style={{color: heartbeatResult.success ? Colors.success : Colors.danger, fontSize: 11, fontWeight: '600'}}>
+                {heartbeatResult.success ? '✅ Latido recibido con éxito en el backend' : `❌ Error: ${heartbeatResult.error}`}
+              </Text>
+            )}
+          </View>
         </View>
 
         <View style={s.btnRow}>

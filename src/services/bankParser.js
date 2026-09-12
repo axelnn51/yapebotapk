@@ -155,13 +155,22 @@ export function parseBankNotification(rawNotification) {
   const provider = detectProvider(packageName, fullText);
 
   // 1. Extraer Monto
-  // S/ 35, S/ 35.00, S/35, S/. 35.00, 30 soles, 30.00 soles
+  // S/ 35, S/ 35.00, S/35, S/. 35.00, S/ 1,250.00, 30 soles, 30.00 soles
   let amount = null;
-  const montoMatch = fullText.match(/S\/\.?\s*(\d+(?:[\.,]\d{1,2})?)/i)
-    || fullText.match(/(\d+(?:[\.,]\d{1,2})?)\s*(?:soles|PEN)/i);
+  const montoMatch = fullText.match(/S\/\.?\s*([\d,]+(?:\.\d{1,2})?)/i)
+    || fullText.match(/(?:te\s+ha\s+plineado|pline[oó])\s*S\/\.?\s*([\d,]+(?:\.\d{1,2})?)/i)
+    || fullText.match(/([\d,]+(?:\.\d{1,2})?)\s*(?:soles|PEN)/i)
+    || fullText.match(/S\/\.?\s*(\d+)/i);
 
   if (montoMatch) {
-    const rawVal = montoMatch[1].replace(',', '.');
+    // Normalizar comas de miles y puntos decimales
+    let rawVal = montoMatch[1].trim();
+    if (rawVal.includes(',') && rawVal.includes('.')) {
+      rawVal = rawVal.replace(/,/g, ''); // 1,250.00 -> 1250.00
+    } else if (rawVal.includes(',') && !rawVal.includes('.')) {
+      // 35,50 -> 35.50
+      rawVal = rawVal.replace(',', '.');
+    }
     const parsed = parseFloat(rawVal);
     if (!isNaN(parsed) && parsed > 0) {
       amount = parsed;
@@ -169,24 +178,26 @@ export function parseBankNotification(rawNotification) {
   }
 
   // 2. Extraer Código de Seguridad si existe (opcional)
-  // "El cód. de seguridad es: 945" / "código de seguridad: 004" / "cód: 123"
+  // "El cód. de seguridad es: 945" / "código de seguridad: 004" / "cód: 123" / "seguridad es: 869"
   let securityCode = null;
-  const codigoMatch = fullText.match(/(?:c[óo]d(?:igo)?|clave|n[º°]?\s*seg)[\s.:]*(?:de\s+)?(?:seguridad|verificaci[oó]n)?[\s.:]*(?:es)?[\s.:]*(\d{3,4})/i);
+  const codigoMatch = fullText.match(/(?:c[óo]d(?:igo)?|clave|n[º°]?\s*seg)[\s.:]*(?:de\s+)?(?:seguridad|verificaci[oó]n)?[\s.:]*(?:es)?[\s.:]*(\d{3,4})/i)
+    || fullText.match(/seguridad\s+es:\s*(\d{3,4})/i);
   if (codigoMatch) {
     securityCode = codigoMatch[1].trim();
   }
 
   // 3. Extraer Nombre del Remitente
-  // Ejemplos Yape:
+  // Ejemplos Yape y Plin:
   // "Luis Llo* te envió un pago por S/ 35"
   // "Yape! WALTER SAENZ te envió un pago por S/ 70.00"
   // "Yape! VARGAS PALOMINO SHARON SALOME te envió un pago por S/ 30.00"
-  // "Dany Rav* te envió un pago por S/ 30"
+  // "Juan Perez te ha plineado S/ 25.00"
+  // "Has recibido un pago de Juan Perez por S/ 20.00"
   // "Plin! Recibiste S/ 25.00 de Juan Perez"
   let senderName = null;
 
-  // Regex para Yape: busca lo que está antes de "te envió", "te yapeó", "te envio"
-  const yapeSenderMatch = fullText.match(/(?:Yape!\s*)?([A-ZÁÉÍÓÚÑa-záéíóúñ*0-9\s.]{2,40}?)\s+te\s+(?:envi[oó]|yape[oó]|transfiri[oó])/i);
+  // Patrón A: "[Nombre] te envió / te yapeó / te transfirió"
+  const yapeSenderMatch = fullText.match(/(?:Yape!\s*)?([A-ZÁÉÍÓÚÑa-záéíóúñ*0-9\s.]{2,40}?)\s+te\s+(?:envi[oó]|yape[oó]|transfiri[oó]|ha\s+enviado)/i);
   if (yapeSenderMatch && yapeSenderMatch[1]) {
     const candidate = yapeSenderMatch[1].trim().replace(/^Yape!\s*/i, '').trim();
     if (candidate.length > 1 && !candidate.toLowerCase().includes('yape')) {
@@ -194,12 +205,34 @@ export function parseBankNotification(rawNotification) {
     }
   }
 
-  // Si no hizo match y es Plin: "de [Nombre]"
+  // Patrón B: "[Nombre] te ha plineado"
+  if (!senderName) {
+    const plineadoMatch = fullText.match(/([A-ZÁÉÍÓÚÑa-záéíóúñ*0-9\s.]{2,40}?)\s+te\s+ha\s+plineado/i);
+    if (plineadoMatch && plineadoMatch[1]) {
+      const candidate = plineadoMatch[1].trim();
+      if (!candidate.toLowerCase().includes('plin') && !candidate.toLowerCase().includes('banco')) {
+        senderName = candidate;
+      }
+    }
+  }
+
+  // Patrón C: "has recibido un pago de [Nombre] por" o "recibiste de [Nombre]"
+  if (!senderName) {
+    const recibidoMatch = fullText.match(/(?:has recibido un pago de|recibiste de|pago de)\s+([A-ZÁÉÍÓÚÑa-záéíóúñ*0-9\s.]{2,40}?)\s+(?:por|de|el)/i);
+    if (recibidoMatch && recibidoMatch[1]) {
+      const candidate = recibidoMatch[1].trim();
+      if (!candidate.toLowerCase().includes('yape') && !candidate.toLowerCase().includes('plin')) {
+        senderName = candidate;
+      }
+    }
+  }
+
+  // Patrón D: "de [Nombre]" o "desde [Nombre]" (Plin / Interbank)
   if (!senderName) {
     const plinSenderMatch = fullText.match(/(?:de|desde)\s+([A-ZÁÉÍÓÚÑa-záéíóúñ\s]{3,35})/i);
     if (plinSenderMatch && plinSenderMatch[1]) {
       const candidate = plinSenderMatch[1].trim();
-      if (!candidate.toLowerCase().includes('plin') && !candidate.toLowerCase().includes('banco')) {
+      if (!candidate.toLowerCase().includes('plin') && !candidate.toLowerCase().includes('banco') && !candidate.toLowerCase().includes('interbank')) {
         senderName = candidate;
       }
     }
@@ -214,7 +247,9 @@ export function parseBankNotification(rawNotification) {
   // Debe tener un monto y al menos una palabra clave de recepción/pago
   const fullLower = fullText.toLowerCase();
   const paymentKeywords = [
-    'te envió', 'te envio', 'te yapeó', 'te yapeo', 'recibiste', 'te transfirió', 'te transfirio', 'abono', 'depósito', 'deposito'
+    'te envió', 'te envio', 'te yapeó', 'te yapeo', 'recibiste', 'te transfirió',
+    'te transfirio', 'abono', 'depósito', 'deposito', 'plineado', 'plineó',
+    'te ha plineado', 'has recibido', 'pago recibido', 'recibiste un yape'
   ];
   const isSystemNotification = fullLower.includes('pedido #') || fullLower.includes('nuevo pedido') || fullLower.includes('completado') || fullLower.includes('dashboard') || fullLower.includes('tienda');
   const hasPaymentKeyword = paymentKeywords.some(kw => fullLower.includes(kw));

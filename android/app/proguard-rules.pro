@@ -13,3 +13,23 @@
 
 # react-native-android-notification-listener
 -keep class com.lesimoes.androidnotificationlistener.** { *; }
+
+# Expo Modules & Kotlin Reflection
+-keep class expo.modules.** { *; }
+-keep class expo.modules.kotlin.** { *; }
+-keep interface expo.modules.** { *; }
+-keep @interface expo.modules.** { *; }
+
+# React Native Core
+-keep class com.facebook.react.** { *; }
+-keep class com.facebook.jni.** { *; }
+-keep class com.facebook.fbreact.** { *; }
+-keep class com.facebook.soloader.** { *; }
+
+# Async Storage
+-keep class com.reactnativecommunity.asyncstorage.** { *; }
+
+# Google Firebase & Play Services
+-keep class com.google.firebase.** { *; }
+-keep class com.google.android.gms.** { *; }
+

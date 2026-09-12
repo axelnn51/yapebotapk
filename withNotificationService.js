@@ -51,6 +51,7 @@ module.exports = function withNotificationService(config) {
       app.service.push({
         $: {
           'android:name': headlessServiceName,
+          'android:exported': 'false',
         }
       });
     }

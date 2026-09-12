@@ -124,55 +124,80 @@ function SettingsStack() {
 export default function App() {
   React.useEffect(() => {
     // 1. Inicializar canal de notificaciones Android incondicionalmente
-    api.setupNotificationChannel().catch(console.warn);
+    try {
+      api.setupNotificationChannel().catch(console.warn);
+    } catch (e) {
+      console.warn('Channel setup error:', e);
+    }
 
     // 2. Registrar Push Token al iniciar
-    api.registerPushToken().catch(console.warn);
+    try {
+      api.registerPushToken().catch(console.warn);
+    } catch (e) {
+      console.warn('Register push token error:', e);
+    }
 
     // 3. Listener para reintentar sincronización si la app vuelve a primer plano
-    const appStateSub = AppState.addEventListener('change', nextState => {
-      if (nextState === 'active') {
-        api.registerPushToken().catch(() => {});
-      }
-    });
+    let appStateSub = null;
+    try {
+      appStateSub = AppState.addEventListener('change', nextState => {
+        if (nextState === 'active') {
+          api.registerPushToken().catch(() => {});
+        }
+      });
+    } catch (e) {}
 
     // 4. Listener si el token FCM es renovado por el sistema
-    const tokenSub = Notifications.addPushTokenListener(() => {
-      api.registerPushToken().catch(() => {});
-    });
+    let tokenSub = null;
+    try {
+      tokenSub = Notifications.addPushTokenListener(() => {
+        api.registerPushToken().catch(() => {});
+      });
+    } catch (e) {}
 
     // 5. Escuchar notificaciones Push recibidas (Foreground / Background)
-    const receivedSub = Notifications.addNotificationReceivedListener(notification => {
-      const content = notification.request.content;
-      AsyncStorage.setItem('@yape_last_push_received', new Date().toISOString()).catch(() => {});
-      logEvent(
-        'FCM',
-        content.title || 'Push recibido',
-        content.body || '',
-        EVENT_TYPES.PUSH_RECEIVED
-      ).catch(() => {});
-    });
+    let receivedSub = null;
+    try {
+      receivedSub = Notifications.addNotificationReceivedListener(notification => {
+        const content = notification?.request?.content;
+        if (!content) return;
+        AsyncStorage.setItem('@yape_last_push_received', new Date().toISOString()).catch(() => {});
+        logEvent(
+          'FCM',
+          content.title || 'Push recibido',
+          content.body || '',
+          EVENT_TYPES.PUSH_RECEIVED
+        ).catch(() => {});
+      });
+    } catch (e) {}
 
     // 6. Escuchar cuando el usuario toca la notificación
-    const responseSub = Notifications.addNotificationResponseReceivedListener(response => {
-      const data = response.notification.request.content.data;
-      if (data?.orderId && navigationRef.current) {
-        navigationRef.current.navigate('Pedidos', {
-          screen: 'OrderDetail',
-          params: { orderId: data.orderId }
-        });
-      }
-    });
+    let responseSub = null;
+    try {
+      responseSub = Notifications.addNotificationResponseReceivedListener(response => {
+        const data = response?.notification?.request?.content?.data;
+        if (data?.orderId && navigationRef.current) {
+          navigationRef.current.navigate('Pedidos', {
+            screen: 'OrderDetail',
+            params: { orderId: data.orderId }
+          });
+        }
+      });
+    } catch (e) {}
 
     // 7. Iniciar Heartbeat de monitorización periódica (cada 2 minutos)
-    startHeartbeat(120000);
+    try {
+      startHeartbeat(120000);
+    } catch (e) {
+      console.warn('Heartbeat start error:', e);
+    }
 
     return () => {
-      stopHeartbeat();
-      appStateSub.remove();
-      tokenSub.remove();
-      receivedSub.remove();
-      responseSub.remove();
+      try { stopHeartbeat(); } catch (e) {}
+      if (appStateSub?.remove) appStateSub.remove();
+      if (tokenSub?.remove) tokenSub.remove();
+      if (receivedSub?.remove) receivedSub.remove();
+      if (responseSub?.remove) responseSub.remove();
     };
   }, []);
 

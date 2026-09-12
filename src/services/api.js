@@ -8,13 +8,17 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { logEvent, EVENT_TYPES } from './eventLogger';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+try {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
+  });
+} catch (e) {
+  console.warn('[api] Failed to set notification handler:', e.message);
+}
 
 const STORAGE_KEYS = {
   SERVER_URL: '@yape_server_url',

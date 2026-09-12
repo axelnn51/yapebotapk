@@ -50,7 +50,7 @@
       </intent-filter>
     </service>
     <!-- HeadlessJsTaskService — CRÍTICO: ejecuta el código JS cuando llega una notificación -->
-    <service android:name="com.lesimoes.androidnotificationlistener.RNAndroidNotificationListenerHeadlessJsTaskService"/>
+    <service android:name="com.lesimoes.androidnotificationlistener.RNAndroidNotificationListenerHeadlessJsTaskService" android:exported="false"/>
     <!-- Boot Receiver para reiniciar el listener después de reinicio del celular -->
     <receiver android:name="com.lesimoes.androidnotificationlistener.BootUpReceiver"
         android:enabled="true"

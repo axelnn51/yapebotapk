@@ -205,6 +205,21 @@ export async function flushQueue(sendFunction) {
 }
 
 /**
+ * Obtiene estadísticas de la cola (usado por heartbeatService)
+ * @returns {Promise<{ pending: number, failed: number, total: number }>}
+ */
+export async function getQueueStats() {
+  try {
+    const queue = await getQueue();
+    const pending = queue.filter(q => q.status === 'pending').length;
+    const failed = queue.filter(q => q.status === 'failed').length;
+    return { pending, failed, total: queue.length };
+  } catch (e) {
+    return { pending: 0, failed: 0, total: 0 };
+  }
+}
+
+/**
  * Limpia la cola por completo (solo para mantenimiento)
  */
 export async function clearQueue() {

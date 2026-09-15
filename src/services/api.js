@@ -38,11 +38,22 @@ export const PUSH_STORAGE_KEYS = {
 let cachedUrl = null;
 let cachedKey = null;
 
+export const DEFAULT_SERVER_URL = process.env.EXPO_PUBLIC_SERVER_URL || 'https://yape.cdkeysperu.com';
+export const DEFAULT_API_KEY = process.env.EXPO_PUBLIC_API_KEY || '';
+
 export async function getConfig() {
   if (cachedUrl && cachedKey) return { url: cachedUrl, key: cachedKey };
   let url = await AsyncStorage.getItem(STORAGE_KEYS.SERVER_URL);
-  const key = await AsyncStorage.getItem(STORAGE_KEYS.API_KEY);
+  let key = await AsyncStorage.getItem(STORAGE_KEYS.API_KEY);
   
+  // Zero-Config: Valores predeterminados de producción y auto-migración
+  if (!url || !url.trim()) {
+    url = DEFAULT_SERVER_URL;
+  }
+  if (!key || !key.trim() || key === 'cdkeys-yape-2026-secret-key-prod') {
+    key = DEFAULT_API_KEY;
+  }
+
   if (url && !url.startsWith('http')) {
     url = `http://${url}`;
   }

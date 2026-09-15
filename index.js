@@ -6,13 +6,13 @@ import { AppRegistry } from 'react-native';
 import { parseBankNotification, extractFullText, isMonitoredApp } from './src/services/bankParser';
 import { logEvent, EVENT_TYPES } from './src/services/eventLogger';
 import { enqueueAndSend, flushQueue } from './src/services/notificationQueue';
+import { getConfig } from './src/services/api';
 
 // ============================================================
 // Función de envío directo al backend autenticado
 // ============================================================
 const sendToBackend = async (parsed) => {
-  const url = await AsyncStorage.getItem('@yape_server_url');
-  const key = await AsyncStorage.getItem('@yape_api_key');
+  const { url, key } = await getConfig();
 
   if (!url || !key) {
     throw new Error('Servidor o API Key no configurados en Configuración.');

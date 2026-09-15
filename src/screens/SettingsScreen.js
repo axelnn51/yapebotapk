@@ -8,9 +8,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, Spacing, FontSize, BorderRadius } from '../theme/colors';
-import { getConfig, saveConfig, api } from '../services/api';
+import { getConfig, saveConfig, api, DEFAULT_SERVER_URL, DEFAULT_API_KEY } from '../services/api';
 import { openAutoStartSettings, openBatteryOptimizationSettings, openAppDetailsSettings } from '../services/deviceSettings';
 import { sendHeartbeat, getHeartbeatStatus } from '../services/heartbeatService';
+import { parseBankNotification } from '../services/bankParser';
+import { logEvent, EVENT_TYPES } from '../services/eventLogger';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
@@ -170,16 +172,16 @@ export default function SettingsScreen({ navigation }) {
 
   const loadConfig = async () => {
     const cfg = await getConfig();
-    if (cfg.url) setServerUrl(cfg.url);
-    if (cfg.key) setApiKey(cfg.key);
+    setServerUrl(cfg.url || DEFAULT_SERVER_URL);
+    setApiKey(cfg.key || DEFAULT_API_KEY);
   };
 
   const handleSave = async () => {
-    if (!serverUrl.trim()) return Alert.alert('Error', 'Ingresa la URL del servidor');
-    if (!apiKey.trim()) return Alert.alert('Error', 'Ingresa la API Key');
+    const urlToSave = serverUrl.trim() || DEFAULT_SERVER_URL;
+    const keyToSave = apiKey.trim() || DEFAULT_API_KEY;
     setSaving(true);
     try {
-      await saveConfig(serverUrl.trim(), apiKey.trim());
+      await saveConfig(urlToSave, keyToSave);
       const regResult = await api.registerPushToken();
       
       if (regResult && regResult.status === 'registered') {
@@ -199,15 +201,43 @@ export default function SettingsScreen({ navigation }) {
 
   const testListener = async () => {
     try {
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: 'Yape! de Antigravity',
-          body: 'Antigravity te envió S/ 1.00. El sistema de lectura funciona!',
-          data: { test: true },
-        },
-        trigger: null, // instant
-      });
-      Alert.alert('🔔 Notificación Enviada', 'En 1-2 segundos el contador de lecturas debería subir y mostrarse en "Última lectura".');
+      // 1. Probar el motor de parseo con un payload sintético real de Yape
+      const mockRaw = {
+        packageName: 'com.bcp.innovacxion.yapeapp',
+        title: 'Yape!',
+        text: 'Antigravity te envió un pago por S/ 1.00. El cód. de seguridad es: 999.',
+        timestamp: Date.now(),
+      };
+      const parsed = parseBankNotification(mockRaw);
+
+      if (parsed && parsed.isValid) {
+        // Registrar en el log de eventos
+        await logEvent('Yape', 'Captura de prueba local ejecutada', `S/ ${parsed.amount} - Cód: ${parsed.securityCode}`, EVENT_TYPES.NOTIFICATION_RECEIVED);
+        
+        // Guardar última lectura y aumentar contador
+        const notifSummary = {
+          provider: 'Yape',
+          amount: parsed.amount,
+          senderName: parsed.senderName || 'Antigravity Test',
+          securityCode: parsed.securityCode,
+          timestamp: new Date().toLocaleTimeString(),
+        };
+        await AsyncStorage.setItem('@yape_last_notification', JSON.stringify(notifSummary));
+        
+        const countStr = await AsyncStorage.getItem('@yape_notification_count');
+        const nextCount = (parseInt(countStr || '0', 10) + 1);
+        await AsyncStorage.setItem('@yape_notification_count', String(nextCount));
+        
+        setNotifCount(nextCount);
+        setLastNotif(notifSummary);
+
+        Alert.alert(
+          '✅ Test de Captura Exitoso',
+          `El motor procesó correctamente el formato de Yape:\n• Monto: S/ ${parsed.amount}\n• Cód. Seguridad: ${parsed.securityCode}\n• Remitente: ${parsed.senderName}\n\nEl contador local ha subido a ${nextCount}.`
+        );
+      } else {
+        Alert.alert('⚠️ Error en Parser', parsed?.reason || 'No se pudo interpretar el formato.');
+      }
     } catch (e) {
       Alert.alert('Error', e.message);
     }

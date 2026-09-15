@@ -18,23 +18,22 @@ let lastHeartbeatStatus = {
   error: null,
 };
 
+import { getConfig, DEFAULT_SERVER_URL, DEFAULT_API_KEY } from './api';
+
 /**
- * Obtiene la configuración del servidor guardada en AsyncStorage
+ * Obtiene la configuración del servidor guardada en AsyncStorage con fallback de producción
  */
 async function getServerConfig() {
   try {
-    const [savedUrl, savedKey] = await Promise.all([
-      AsyncStorage.getItem('@yape_server_url'),
-      AsyncStorage.getItem('@yape_api_key'),
-    ]);
+    const { url, key } = await getConfig();
     return {
-      serverUrl: savedUrl || 'https://yape.cdkeysperu.com',
-      apiKey: savedKey || 'cdkeys-yape-2026-secret-key-prod',
+      serverUrl: url || DEFAULT_SERVER_URL,
+      apiKey: key || DEFAULT_API_KEY,
     };
   } catch {
     return {
-      serverUrl: 'https://yape.cdkeysperu.com',
-      apiKey: 'cdkeys-yape-2026-secret-key-prod',
+      serverUrl: DEFAULT_SERVER_URL,
+      apiKey: DEFAULT_API_KEY,
     };
   }
 }

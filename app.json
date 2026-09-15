@@ -2,7 +2,7 @@
   "expo": {
     "name": "Yape Dashboard",
     "slug": "yape-dashboard",
-    "version": "3.3.0",
+    "version": "3.3.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -11,7 +11,7 @@
       "backgroundColor": "#0a0a1a"
     },
     "android": {
-      "versionCode": 7,
+      "versionCode": 8,
       "package": "com.yape.dashboard",
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {

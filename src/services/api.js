@@ -50,8 +50,9 @@ export async function getConfig() {
   if (!url || !url.trim()) {
     url = DEFAULT_SERVER_URL;
   }
-  if (!key || !key.trim() || key === 'cdkeys-yape-2026-secret-key-prod') {
+  if (!key || !key.trim() || key === 'cdkeys-yape-2026-secret-key-prod' || key === 'f6b1aca67a1831115b8270cec2912aa17b594a320f45d5c192f4d0f386ef974a') {
     key = DEFAULT_API_KEY;
+    AsyncStorage.setItem(STORAGE_KEYS.API_KEY, DEFAULT_API_KEY).catch(() => {});
   }
 
   if (url && !url.startsWith('http')) {
@@ -143,11 +144,18 @@ async function apiRequest(endpoint, method = 'GET', body = null) {
   }
 
   const doFetch = async () => {
+    // Parámetro anti-caché para GET: evita que Cloudflare o proxies sirvan datos congelados
+    const separator = endpoint.includes('?') ? '&' : '?';
+    const finalUrl = method === 'GET' ? `${url}/api${endpoint}${separator}_t=${Date.now()}` : `${url}/api${endpoint}`;
+
     const options = {
       method,
       headers: {
         'Content-Type': 'application/json',
         'X-API-Key': key,
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
       },
     };
 
@@ -158,7 +166,7 @@ async function apiRequest(endpoint, method = 'GET', body = null) {
     options.signal = controller.signal;
 
     try {
-      const response = await fetch(`${url}/api${endpoint}`, options);
+      const response = await fetch(finalUrl, options);
       clearTimeout(timeout);
 
       if (response.status === 401) {
@@ -415,6 +423,8 @@ export async function getPushDiagnosticStatus() {
 // ============================================================
 
 export const api = {
+  invalidateCache,
+
   // Push Notifications
   registerPushToken,
   setupNotificationChannel,

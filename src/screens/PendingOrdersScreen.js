@@ -43,6 +43,9 @@ export default function PendingOrdersScreen({ navigation }) {
         return;
       }
       setError(null);
+      if (!isBackground) {
+        api.invalidateCache();
+      }
       const result = await api.getAllOrders(filter);
       setOrders(result.data || []);
     } catch (e) {

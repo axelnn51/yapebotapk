@@ -15,3 +15,5 @@ build_log.txt
 *.apk
 PRUEBAS/
 *.traineddata
+APK VUELTO/extracted*/
+*.xapk

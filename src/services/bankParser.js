@@ -1,12 +1,16 @@
 // ============================================================
-// Bank Notification Parser — YapeBot Mobile
-// Soporta: Yape, Plin (Interbank, BBVA, Scotiabank), BBVA, Interbank
+// Bank Notification Parser — YapeBot Mobile (v3.4)
+// Soporta: Yape, Plin (Interbank, BBVA, Scotiabank), BCP, BBVA, Interbank, Scotiabank
+// Mejoras inspiradas en motor Vuelto: Anti-OTP, Filtro Anti-Spam, Patrones Extendidos
 // ============================================================
 
 export const BANK_PACKAGES = {
   YAPE: [
     'com.bcp.innovacxion.yapeapp',
     'com.bcp.innovacxion.yape',
+  ],
+  BCP: [
+    'com.bcp.bank.bcp',
   ],
   INTERBANK: [
     'pe.com.interbank.mobilebanking',
@@ -17,6 +21,7 @@ export const BANK_PACKAGES = {
   ],
   SCOTIABANK: [
     'com.scotiabank.peru',
+    'com.scotiabank.pe.android',
   ],
 };
 
@@ -55,32 +60,87 @@ export function extractFullText(notif) {
 }
 
 /**
+ * Filtro Anti-OTP y Anti-Spam inspirado en el clasificador de Vuelto
+ * Detecta y descarta códigos dinámicos, OTPs, promociones, préstamos y publicidad de bancos
+ * @param {string} text Texto completo de la notificación
+ * @returns {boolean} true si es mensaje descartable (OTP, publicidad o alerta del sistema)
+ */
+export function isNonPaymentMessage(text = '') {
+  const t = text.toLowerCase();
+  
+  // 1. Claves OTP / Códigos de confirmación o validación
+  // "Tu clave dinámica es 198246 para confirmar tu transferencia", "código de verificación", etc.
+  const isOtp = /(?:clave\s+din[áa]mica|c[óo]digo\s+(?:de\s+)?(?:verificaci[óo]n|confirmaci[óo]n|autorizaci[óo]n|otp)|token\s+digital|no\s+lo?\s+compartas\s+con\s+nadie|v[áa]lido\s+(?:por\s+)?\d+\s*minutos?)/i.test(t);
+  if (isOtp) return true;
+
+  // 2. Promociones / Publicidad de bancos y billeteras
+  const isPromo = /(?:%?\s*(?:dscto|descuento|dto|off)\b|cyberwow|cyberdays|black\s*friday|pide\s+tu\s+pr[ée]stamo|pr[ée]stamo\s+(?:al\s+toque|personal|preaprobado)|tarjeta\s+de\s+cr[ée]dito|cuotas\s+sin\s+interes(?:es)?|acumula\s+(?:millas|puntos)|sorteo\b|cashback|cup[óo]n)/i.test(t);
+  if (isPromo) return true;
+
+  // 3. Avisos del sistema / Seguridad / Bloqueos
+  const isSystemAlert = /(?:app\s+bloqueada|sesi[óo]n\s+expirada|bloqueaste\s+tu\s+tarjeta|actualizaste\s+la\s+configuraci[óo]n|cambiaste\s+el\s+l[íi]mite)/i.test(t);
+  if (isSystemAlert) return true;
+
+  return false;
+}
+
+/**
  * Identifica la entidad financiera basándose en el package o en el contenido del texto
  * @param {string} packageName Nombre del paquete Android (ej: com.bcp.innovacxion.yapeapp)
  * @param {string} text Texto de la notificación
- * @returns {string} Proveedor detectado ('Yape', 'Plin', 'BBVA', 'Interbank', 'Otro')
+ * @returns {string} Proveedor detectado ('Yape', 'Plin', 'BCP', 'BBVA', 'Interbank', 'Scotiabank', 'Desconocido')
  */
 export function detectProvider(packageName = '', text = '') {
   const pkg = (packageName || '').toLowerCase();
   const txt = (text || '').toLowerCase();
 
-  if (BANK_PACKAGES.YAPE.some(p => pkg === p) || pkg.includes('yape') || txt.includes('yape')) {
+  if (
+    BANK_PACKAGES.YAPE.some(p => pkg === p) ||
+    pkg.includes('yape') ||
+    txt.includes('yape') ||
+    txt.includes('cód. de seguridad') ||
+    txt.includes('cod. de seguridad')
+  ) {
     return 'Yape';
   }
-  if (txt.includes('plin')) {
+  if (txt.includes('plin') || txt.includes('plineado') || txt.includes('plineó')) {
     return 'Plin';
+  }
+  if (
+    BANK_PACKAGES.INTERBANK.some(p => pkg === p) ||
+    pkg.includes('interbank') ||
+    txt.includes('interbank') ||
+    txt.includes('tran s/')
+  ) {
+    return 'Interbank';
   }
   if (BANK_PACKAGES.BBVA.some(p => pkg === p) || pkg.includes('bbva') || txt.includes('bbva')) {
     return 'BBVA';
   }
-  if (BANK_PACKAGES.INTERBANK.some(p => pkg === p) || pkg.includes('interbank') || txt.includes('interbank')) {
-    return 'Interbank';
+  if (BANK_PACKAGES.BCP.some(p => pkg === p) || pkg.includes('bcp') || txt.includes('bcp')) {
+    return 'BCP';
   }
   if (BANK_PACKAGES.SCOTIABANK.some(p => pkg === p) || pkg.includes('scotiabank') || txt.includes('scotiabank')) {
     return 'Scotiabank';
   }
 
   return 'Desconocido';
+}
+
+/**
+ * Normaliza y convierte un string numérico a Float
+ * Soporta "1,250.00", "2.00", "2,00", etc.
+ */
+export function parseAmount(rawStr) {
+  if (!rawStr) return null;
+  let val = rawStr.trim();
+  if (val.includes(',') && val.includes('.')) {
+    val = val.replace(/,/g, '');
+  } else if (val.includes(',') && !val.includes('.')) {
+    val = val.replace(',', '.');
+  }
+  const parsed = parseFloat(val);
+  return !isNaN(parsed) && parsed > 0 ? parsed : null;
 }
 
 /**
@@ -132,6 +192,7 @@ export function isMonitoredApp(packageName = '', text = '') {
   // 4. SOLO ACEPTAR PAQUETES BANCARIOS OFICIALES
   const allKnownPackages = [
     ...BANK_PACKAGES.YAPE,
+    ...BANK_PACKAGES.BCP,
     ...BANK_PACKAGES.INTERBANK,
     ...BANK_PACKAGES.BBVA,
     ...BANK_PACKAGES.SCOTIABANK,
@@ -139,7 +200,6 @@ export function isMonitoredApp(packageName = '', text = '') {
 
   return allKnownPackages.includes(pkg);
 }
-
 
 /**
  * Parsea el texto completo para determinar si es un pago y extraer sus componentes
@@ -152,82 +212,109 @@ export function parseBankNotification(rawNotification) {
   const title = (rawNotification.title || '').trim();
   const timestamp = rawNotification.time ? parseInt(rawNotification.time, 10) : Date.now();
 
+  // 1. FILTRO ANTI-OTP Y ANTI-SPAM (Vuelto Pattern)
+  if (isNonPaymentMessage(fullText)) {
+    return {
+      isPayment: false,
+      reason: 'Mensaje no financiero o OTP detectado',
+      provider: detectProvider(packageName, fullText),
+      rawText: fullText,
+      fullText,
+      packageName,
+      timestamp,
+    };
+  }
+
   const provider = detectProvider(packageName, fullText);
 
-  // 1. Extraer Monto
-  // S/ 35, S/ 35.00, S/35, S/. 35.00, S/ 1,250.00, 30 soles, 30.00 soles
   let amount = null;
-  const montoMatch = fullText.match(/S\/\.?\s*([\d,]+(?:\.\d{1,2})?)/i)
-    || fullText.match(/(?:te\s+ha\s+plineado|pline[oó])\s*S\/\.?\s*([\d,]+(?:\.\d{1,2})?)/i)
-    || fullText.match(/([\d,]+(?:\.\d{1,2})?)\s*(?:soles|PEN)/i)
-    || fullText.match(/S\/\.?\s*(\d+)/i);
-
-  if (montoMatch) {
-    // Normalizar comas de miles y puntos decimales
-    let rawVal = montoMatch[1].trim();
-    if (rawVal.includes(',') && rawVal.includes('.')) {
-      rawVal = rawVal.replace(/,/g, ''); // 1,250.00 -> 1250.00
-    } else if (rawVal.includes(',') && !rawVal.includes('.')) {
-      // 35,50 -> 35.50
-      rawVal = rawVal.replace(',', '.');
-    }
-    const parsed = parseFloat(rawVal);
-    if (!isNaN(parsed) && parsed > 0) {
-      amount = parsed;
-    }
-  }
-
-  // 2. Extraer Código de Seguridad si existe (opcional)
-  // "El cód. de seguridad es: 945" / "código de seguridad: 004" / "cód: 123" / "seguridad es: 869"
-  let securityCode = null;
-  const codigoMatch = fullText.match(/(?:c[óo]d(?:igo)?|clave|n[º°]?\s*seg)[\s.:]*(?:de\s+)?(?:seguridad|verificaci[oó]n)?[\s.:]*(?:es)?[\s.:]*(\d{3,4})/i)
-    || fullText.match(/seguridad\s+es:\s*(\d{3,4})/i);
-  if (codigoMatch) {
-    securityCode = codigoMatch[1].trim();
-  }
-
-  // 3. Extraer Nombre del Remitente
-  // Ejemplos Yape y Plin:
-  // "Luis Llo* te envió un pago por S/ 35"
-  // "Yape! WALTER SAENZ te envió un pago por S/ 70.00"
-  // "Yape! VARGAS PALOMINO SHARON SALOME te envió un pago por S/ 30.00"
-  // "Juan Perez te ha plineado S/ 25.00"
-  // "Has recibido un pago de Juan Perez por S/ 20.00"
-  // "Plin! Recibiste S/ 25.00 de Juan Perez"
   let senderName = null;
+  let securityCode = null;
 
-  // Patrón A: "[Nombre] te envió / te yapeó / te transfirió"
-  const yapeSenderMatch = fullText.match(/(?:Yape!\s*)?([A-ZÁÉÍÓÚÑa-záéíóúñ*0-9\s.]{2,40}?)\s+te\s+(?:envi[oó]|yape[oó]|transfiri[oó]|ha\s+enviado)/i);
-  if (yapeSenderMatch && yapeSenderMatch[1]) {
-    const candidate = yapeSenderMatch[1].trim().replace(/^Yape!\s*/i, '').trim();
-    if (candidate.length > 1 && !candidate.toLowerCase().includes('yape')) {
+  // 2. Extraer Código de Seguridad (Yape & Bancos)
+  // "El cód. de seguridad es: 724" / "código de seguridad: 004" / "cód: 123" / "seguridad es: 869"
+  const secCodeMatch = fullText.match(/(?:c[óo]d(?:igo|\.)?(?:\s+de)?(?:\s+seguridad)?(?:\s+es)?|clave)\s*[:.\-]?\s*([A-Z0-9]{3,8})\b/i)
+    || fullText.match(/seguridad\s+es:\s*(\d{3,4})/i);
+  if (secCodeMatch) {
+    securityCode = secCodeMatch[1].trim();
+  }
+
+  // 3. Patrones de Alta Precisión por Banco/Billetera (Inspirados en Vuelto)
+
+  // PATRÓN YAPE:
+  // "Jennifer Cho* te envió un pago por S/ 2.00"
+  // "Confirmación de pago | Victor Mun* te envió un pago por S/ 3.00"
+  // "Yape! WALTER SAENZ te envió un pago por S/ 70.00"
+  // "Laurita Rob* te envió un pago por S/ 6.60"
+  const yapeMatch = fullText.match(/(?:(?:Confirmaci[oó]n\s+de\s+pago|Yape!)\s*\|?\s*)?([A-ZÁÉÍÓÚÑa-zñ*0-9\s.]{2,40}?)\s+te\s+(?:envi[oó]|yape[oó]|transfiri[oó]|ha\s+enviado)\s+(?:un\s+pago\s+por\s+)?S\/\.?\s*([\d,]+(?:\.\d{1,2})?)/i);
+  if (yapeMatch) {
+    let candidate = yapeMatch[1].replace(/^(?:Confirmaci[oó]n\s+de\s+pago|Yape!)\s*/i, '').trim();
+    if (!candidate.toLowerCase().includes('yape') && candidate.length > 1) {
       senderName = candidate;
     }
+    amount = parseAmount(yapeMatch[2]);
   }
 
-  // Patrón B: "[Nombre] te ha plineado"
-  if (!senderName) {
-    const plineadoMatch = fullText.match(/([A-ZÁÉÍÓÚÑa-záéíóúñ*0-9\s.]{2,40}?)\s+te\s+ha\s+plineado/i);
-    if (plineadoMatch && plineadoMatch[1]) {
-      const candidate = plineadoMatch[1].trim();
-      if (!candidate.toLowerCase().includes('plin') && !candidate.toLowerCase().includes('banco')) {
-        senderName = candidate;
-      }
+  // PATRÓN PLIN (A):
+  // "Carlos Díaz te ha plineado S/241.50"
+  if (!amount || !senderName) {
+    const plinMatch1 = fullText.match(/([A-ZÁÉÍÓÚÑa-zñ*0-9\s.]{2,40}?)\s+te\s+ha\s+plineado\s+S\/\.?\s*([\d,]+(?:\.\d{1,2})?)/i);
+    if (plinMatch1) {
+      senderName = plinMatch1[1].trim();
+      amount = parseAmount(plinMatch1[2]);
     }
   }
 
-  // Patrón C: "has recibido un pago de [Nombre] por" o "recibiste de [Nombre]"
-  if (!senderName) {
-    const recibidoMatch = fullText.match(/(?:has recibido un pago de|recibiste de|pago de)\s+([A-ZÁÉÍÓÚÑa-záéíóúñ*0-9\s.]{2,40}?)\s+(?:por|de|el)/i);
-    if (recibidoMatch && recibidoMatch[1]) {
-      const candidate = recibidoMatch[1].trim();
-      if (!candidate.toLowerCase().includes('yape') && !candidate.toLowerCase().includes('plin')) {
-        senderName = candidate;
-      }
+  // PATRÓN PLIN (B):
+  // "Plin! Recibiste S/ 25.00 de Juan Perez"
+  if (!amount || !senderName) {
+    const plinMatch2 = fullText.match(/(?:Plin!\s*)?(?:has\s+recibido|recibiste)\s+S\/\.?\s*([\d,]+(?:\.\d{1,2})?)\s+de\s+([A-ZÁÉÍÓÚÑa-zñ*0-9\s.]{2,40})/i);
+    if (plinMatch2) {
+      amount = parseAmount(plinMatch2[1]);
+      senderName = plinMatch2[2].trim();
     }
   }
 
-  // Patrón D: "de [Nombre]" o "desde [Nombre]" (Plin / Interbank)
+  // PATRÓN INTERBANK (A - Formato TRAN):
+  // "TRAN S/ 2.00 A: Brian Josue (12/09/2026 23:17:47)"
+  if (!amount || !senderName) {
+    const ibkMatch1 = fullText.match(/TRAN\s+S\/\.?\s*([\d,]+(?:\.\d{1,2})?)\s*A:\s*(.+?)(?:\s*\(|$)/i);
+    if (ibkMatch1) {
+      amount = parseAmount(ibkMatch1[1]);
+      senderName = ibkMatch1[2].trim();
+    }
+  }
+
+  // PATRÓN INTERBANK (B - Abono en cuenta):
+  // "Abono de S/ 150.00 de Pedro Castro en tu cuenta Simple"
+  if (!amount || !senderName) {
+    const ibkMatch2 = fullText.match(/Abono\s+de\s+S\/\.?\s*([\d,]+(?:\.\d{1,2})?)\s+de\s+(.+?)(?:\s+en|\s*$)/i);
+    if (ibkMatch2) {
+      amount = parseAmount(ibkMatch2[1]);
+      senderName = ibkMatch2[2].trim();
+    }
+  }
+
+  // PATRÓN BCP / BBVA / SCOTIABANK (Transferencias directas):
+  // "Transferencia recibida por S/ 35.00 de Maria Elena Gomez"
+  if (!amount || !senderName) {
+    const bcpMatch = fullText.match(/(?:Transferencia\s+recibida|Has\s+recibido\s+un\s+abono|Abono)\s+(?:por|de)?\s*S\/\.?\s*([\d,]+(?:\.\d{1,2})?)\s+(?:de|por)\s+([A-ZÁÉÍÓÚÑa-zñ*0-9\s.]+?)(?:\.|\s+en|$)/i);
+    if (bcpMatch) {
+      amount = parseAmount(bcpMatch[1]);
+      senderName = bcpMatch[2].trim();
+    }
+  }
+
+  // Fallback para monto si todavía no se detectó
+  if (!amount) {
+    const montoMatch = fullText.match(/S\/\.?\s*([\d,]+(?:\.\d{1,2})?)/i)
+      || fullText.match(/([\d,]+(?:\.\d{1,2})?)\s*(?:soles|PEN)/i);
+    if (montoMatch) {
+      amount = parseAmount(montoMatch[1]);
+    }
+  }
+
+  // Fallback para remitente
   if (!senderName) {
     const plinSenderMatch = fullText.match(/(?:de|desde)\s+([A-ZÁÉÍÓÚÑa-záéíóúñ\s]{3,35})/i);
     if (plinSenderMatch && plinSenderMatch[1]) {
@@ -238,26 +325,23 @@ export function parseBankNotification(rawNotification) {
     }
   }
 
-  // Si el título parece ser el remitente (cuando no dice Yape!)
-  if (!senderName && title && !title.toLowerCase().includes('yape') && !title.toLowerCase().includes('plin') && !title.toLowerCase().includes('banco')) {
+  if (!senderName && title && !title.toLowerCase().includes('yape') && !title.toLowerCase().includes('plin') && !title.toLowerCase().includes('banco') && !title.toLowerCase().includes('confirmación')) {
     senderName = title;
   }
 
   // 4. Determinar si es un pago real
-  // Debe tener un monto y al menos una palabra clave de recepción/pago
-  const fullLower = fullText.toLowerCase();
   const paymentKeywords = [
     'te envió', 'te envio', 'te yapeó', 'te yapeo', 'recibiste', 'te transfirió',
     'te transfirio', 'abono', 'depósito', 'deposito', 'plineado', 'plineó',
-    'te ha plineado', 'has recibido', 'pago recibido', 'recibiste un yape'
+    'te ha plineado', 'has recibido', 'pago recibido', 'recibiste un yape', 'tran s/',
+    'transferencia', 'transferencia recibida'
   ];
+  const fullLower = fullText.toLowerCase();
   const isSystemNotification = fullLower.includes('pedido #') || fullLower.includes('nuevo pedido') || fullLower.includes('completado') || fullLower.includes('dashboard') || fullLower.includes('tienda');
   const hasPaymentKeyword = paymentKeywords.some(kw => fullLower.includes(kw));
   const isPayment = amount !== null && amount > 0 && hasPaymentKeyword && !isSystemNotification;
 
-
   // 5. Generar texto limpio para el backend
-  // Si rawNotification tiene bigText o text, preferir el más largo
   const primaryCandidates = [rawNotification.bigText, rawNotification.text, fullText];
   const longestPrimary = primaryCandidates.reduce((a, b) => ((b && b.length > (a ? a.length : 0)) ? b : a), '');
   const cleanMessage = (longestPrimary || fullText).replace(/\s+/g, ' ').trim();
@@ -275,3 +359,4 @@ export function parseBankNotification(rawNotification) {
     timestamp,
   };
 }
+

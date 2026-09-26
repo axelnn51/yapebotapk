@@ -1,0 +1,283 @@
+RegExp
+_RegExp
+FlutterLocalNotificationsPlatform.
+removeBankNotificationQueueItem
+package:flutter_local_notifications_platform_interface/src/types.dart
+package:finanzas/core/notification_listener/post_notification_permission.dart
+package:finanzas/core/notification_listener/bank_last_four_account_match.dart
+listModalEligibleBankNotifications
+attachNotificationTree
+SamplingClock
+_BankNotificationAccessCardState@730346343
+package:flutter_local_notifications/src/callback_dispatcher.dart
+Publicar tus cobros Yape (y bancos permitidos) a 
+package:flutter_local_notifications/src/tz_datetime_mapper.dart
+/seguridad
+defaultScrollNotificationPredicate
+_ScrollNotification&LayoutChangedNotification&ViewportNotificationMixin@215159306
+_nextNotificationDateAsync@740477939
+AndroidFlutterLocalNotificationsPlugin
+package:finanzas/core/notification_listener/bank_notif_template_auto_prefs.dart
+AndroidNotificationChannelMapper|toMap
+init:_parentRegExp@15069316
+https://finanzas-backend.briandev.uk/privacy-policy
+Seguridad biom
+_BankNotificationDetectedModalState@692203731.
+saveClassifierModel
+interbank_peru
+DraggableScrollableNotification
+__PostNotificationPermissionCardState&State&WidgetsBindingObserver@730346343
+package:finanzas/core/notification_listener/bank_notification_template_parser.dart
+NavigationNotification
+purgeStaleBankNotificationQueue
+package:finanzas/shared/widgets/bank_notification_detected_modal.dart
+_processPendingSyncBankNotifications@386409209
+ScrollNotificationObserverState.
+The type argument must be a concrete subclass of FlutterLocalNotificationsPlatform
+yape_incoming
+createNotificationChannel
+FlutterLocalNotificationsPlugin._@863247754
+isNotificationAccessEnabled
+[ReminderScheduler] notificationId=
+BankNotificationModalOrigin.
+_flushObserverNotifications@185124995
+_openPostNotifications@797012454
+package:flutter_local_notifications_platform_interface/flutter_local_notifications_platform_interface.dart
+package:flutter/src/widgets/notification_listener.dart
+MethodChannelFlutterLocalNotificationsPlugin
+RegExpMatch
+_nextNotificationDate@740477939
+AndroidFlutterLocalNotificationsPlugin.
+Crea un negocio para que tus vendedores se enteren cuando te yapeen (QR de tu cuenta). Luego invitas al equipo y eliges los bancos.
+_handleScrollNotification@509083489
+package:flutter_local_notifications/src/platform_specifics/android/schedule_mode.dart
+dexterous.com/flutter/local_notifications
+KeepAliveNotification
+_handleIndicatorNotification@509083489
+notificationDetail
+az te ha plineado S/241.50
+ScrollUpdateNotification.
+init:_regExpSpaceSeparatorOrPunctuation@583105366
+AppleNotification.fromMap
+_parentRegExp@15069316
+bbva_mexico
+_regExpSpaceSeparatorOrPunctuation@583105366$
+Yape - Per
+notification
+takeLaunchedBankNotification
+RegExp_factory
+BankNotificationService
+_hasNotificationAccess@797012454
+dispatchScrollUpdateNotification
+_handleBackButtonDispatcherNotification@205049130
+ la seguridad.
+BankNotificationData
+_RegExpMatch@0150898
+BankNotificationDetectedModal
+[AppDataController] Error syncing classifier model: 
+package:flutter/src/widgets/scroll_notification_observer.dart
+get:samplingClock
+ReminderNotificationScheduler
+AppleNotification
+WebNotification.fromMap
+com.bcp.innovacxion.yapeapp
+consumeBankNotificationSyncNeeded
+isPostNotificationGranted
+Interbank - Per
+accessNotificationPolicy
+_PostNotificationPermissionCardState@730346343
+package:finanzas/features/seguridad/seguridad_page_io.dart
+AppleNotificationSound
+_maybeDispatchNavigationNotification@206188637
+package:finanzas/shared/services/reminder_notification_scheduler.dart
+WebNotification
+com.bbva.nxt_argentina
+n listos. Falta invitar vendedores para que reciban el aviso cuando te yapeen.
+scotiabank_peru
+https://finanzas-backend.briandev.uk
+[AppDataController] Updating classifier model from version 
+package:intl/src/intl/regexp.dart
+onNotification
+_hasPostNotifications@797012454
+/notification-classifier/model
+cancelDetectedNotification
+UserScrollNotification
+bbva_argentina
+combinedBankNotificationDetailForAi
+ScrollStartNotification
+dispatchNotification
+pe.com.interbank.mobilebanking
+scotiabank_chile
+_notificationContentForNotes@692203731
+[AppDataController] Failed to save updated classifier model on native side
+BBVA - Colombia
+_TopNotificationBannerWidgetState@731191058
+Configurar PIN de seguridad
+package:finanzas/core/notification_listener/bank_notif_auto_ai_prefs.dart
+_notificationId@740477939
+_checkPendingNotification@731191058
+dispatchOverscrollNotification
+while dispatching notifications for 
+_defaultOnNavigationNotification@139236006
+cl.scotiabank.go
+_scrollableNotificationIsFromSameSubtree@157183791
+BankNotificationTemplateDef.fromDynamic
+com.finanzas.finanzas/notification_listener
+package:flutter/src/widgets/scroll_notification.dart
+RemoteNotification.fromMap
+package:flutter_local_notifications/src/platform_flutter_local_notifications.dart
+post_notification_permission_asked
+processBankNotificationPendingSync
+processPendingSyncBankNotifications
+Marca Yape u otros cobros en Ajustes para registrarlos solos y avisar a tus vendedores.
+_RegExp@0150898
+lerpLineChartBarDataList
+gemini
+MethodChannelFlutterLocalNotificationsPlugin.
+__BankNotificationCheckerState&State&WidgetsBindingObserver@731191058
+_disposeScrollNotificationObserver@157183791
+__TopNotificationBannerWidgetState&State&SingleTickerProviderStateMixin@731191058
+package:flutter_local_notifications_platform_interface/src/helpers.dart
+El cobro llega al celular del jefe y se avisa a los vendedores. Ideal si el cliente yapea al negocio.
+ScrollUpdateNotification
+bbva_espana
+notifications_active
+notificationTitle
+BBVA - Per
+AndroidNotification
+Scotiabank - M
+ScrollNotification
+Te avisa cuando llega un pago al Yape/cuenta del jefe (para confirmar al cliente).
+SeguridadPage
+BankNotificationChecker
+[AppDataController] Classifier model is already up to date
+_handleScrollNotification@414187611
+resolveBankNotificationAccount
+RegExp_ExecuteMatchSticky
+_parameterRegExp@983172655
+__BankNotificationAccessCardState&State&WidgetsBindingObserver@730346343
+notificationNeedsAppSettings
+co.com.bbva.mb
+_onScrollNotification@754072394
+[AppDataController] Local classifier version: 
+ic_notification
+package:finanzas/core/notification_listener/bank_notification_auto_save.dart
+odo. Cuando te yapen a los bancos configurados, tus vendedores recibir
+yape_peru
+TopNotificationBanner
+Notification
+_notificationBankPackageName@692203731
+_NotificationElement@187140401
+get:notificationContext
+_convertNotificationSoundToMap@967519573
+RegExp.
+Cuando te yapean, tu equipo se entera al toque
+[AppDataController] Classifier model updated successfully to version 
+[AppDataController] Backend classifier version: 
+_tryOpenLaunchedNotification@731191058
+_handleScrollMetricsNotification@222019050
+AndroidNotificationDetailsMapper|toMap
+odo. Cuando yapeen al jefe, aparecer
+openai
+com.scotiabankmx.scotiamovil
+com.scotiabank.pe.android
+bbva_peru
+Scotiabank - Chile
+openNotificationListenerSettings
+RemoteNotification
+RegExp_getPattern
+_handleScrollMetricsNotification@224211710
+dexterous.com/flutter/local_notifications/actions
+Solo lo que te avisamos cuando yapean al negocio. Toca uno para ver el c
+bbva_colombia
+RegExp_getGroupNameMap
+(?:seguridad|verificaci[o
+dart:core/regexp.dart
+didReceiveNotificationResponse
+bcp_peru
+BBVA - M
+dart:core-patch/regexp_patch.dart
+_BankNotificationDetectedModalState@692203731
+BankNotificationTemplateDef
+_PostNotificationPermissionCard@730346343
+__NotificationElement&ProxyElement&NotifiableElementMixin@187140401
+notificationAmountPrefix
+_regExpSpaceSeparators@583105366
+NotificationListener
+patternToRegExp
+_NotificationNode@164042623
+Scotiabank - Per
+_DraggableScrollableNotification&Notification&ViewportNotificationMixin@155035049
+_BankNotificationCheckerState@731191058
+ScrollNotificationObserver
+_TopNotificationBannerWidget@731191058
+package:flutter_local_notifications/src/helpers.dart
+_handleRouterDelegateNotification@205049130
+ a recibir avisos cuando te yapeen (no tiene que configurar nada m
+_RegExp@0150898.
+interbank_transfer_out
+matchAccountForBankNotification
+SizeChangedLayoutNotification
+init:_regExpSpaceSeparators@583105366
+ScrollNotificationObserverState
+ Interbank
+_handleScrollNotification@190442496
+application/x-bcpio
+RegExp_getIsUnicode
+d. de seguridad es: 724
+digo de seguridad
+_handleRouteInformationProviderNotification@205049130
+_handleScrollNotification@224211710
+AndroidNotification.fromMap
+BBVA - Espa
+notificationTime
+package:flutter_local_notifications/src/flutter_local_notifications_plugin.dart*
+com.bbva.bbvacontigo
+reminderNotificationTime
+Ya elegiste los bancos. Ahora invita a tus vendedores para que reciban el aviso cuando te yapeen al QR del negocio.
+mo cobran hoy (Yape, Plin, otro):
+LayoutChangedNotification
+dispatchScrollEndNotification
+dispatchScrollStartNotification
+ScrollMetricsNotification
+interbank_plin_incoming
+takeBankNotificationForModal
+notificationId
+Activa Face ID / huella para entrar siempre con seguridad.
+]d(?:igo|\.)(?:\s+de)?(?:\s+seguridad)?(?:\s+es)?\s*[:.\-]?\s*([A-Z0-9]{3,8})\b
+AndroidNotificationDetailsMapper|_convertStyleInformationToMap
+requestOrOpenPostNotificationPermission
+RegExp_getGroupCount
+package:finanzas/core/notification_listener/bank_notification_service.dart
+AppleNotificationSound.fromMap
+FlutterLocalNotificationsPlugin
+getClassifierModelVersion
+ScrollEndNotification
+scotiabank_mexico
+_isInternalScrollableNotification@157183791
+syncClassifierModel
+seguridad
+com.bbva.nxt_peru
+BCP - Per
+NotificationResponse
+ViewportNotificationMixin
+[ReminderScheduler] _nextNotificationDate: recordatorio d
+package:finanzas/shared/widgets/bank_notification_checker_io.dart
+RegExp_ExecuteMatch
+package:flutter_local_notifications/src/platform_specifics/android/method_channel_mappers.dart
+BankNotificationModalOrigin
+package:firebase_messaging_platform_interface/src/remote_notification.dart
+_BankNotificationAccessCard@730346343
+OverscrollNotification
+drainPendingSyncBankNotifications
+(.+?)\s+te ha plineado\s+S/\s*(\d+(?:[.,]\d+)?)
+OverscrollIndicatorNotification
+_ScrollNotificationObserverScope@216016095
+Bancos/apps detectados actualmente: BCP, Interbank, BBVA y otros m
+/notification-classifier/model-version
+FlutterLocalNotificationsPlatform
+com.bcp.bank.bcp
+notificationBody
+BBVA - Argentina
+init:_parameterRegExp@983172655
+https://finanzas-backend.briandev.uk/terms-of-service

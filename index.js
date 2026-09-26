@@ -7,6 +7,7 @@ import { parseBankNotification, extractFullText, isMonitoredApp } from './src/se
 import { logEvent, EVENT_TYPES } from './src/services/eventLogger';
 import { enqueueAndSend, flushQueue } from './src/services/notificationQueue';
 import { getConfig } from './src/services/api';
+import { saveLocalPayment, updateLocalPaymentStatus } from './src/services/paymentHistory';
 
 // ============================================================
 // Función de envío directo al backend autenticado
@@ -174,10 +175,20 @@ const headlessNotificationListener = async ({ notification }) => {
       EVENT_TYPES.PAYMENT_DETECTED
     );
 
+    // Guardar inmediatamente en historial local persistente
+    let localSaved = null;
+    try {
+      localSaved = await saveLocalPayment(parsed, 'pending');
+    } catch (saveErr) { /* ignore */ }
+
     const queueResult = await enqueueAndSend(parsed, sendToBackend);
 
-    // Actualizar estado para la UI
+    // Actualizar estado para la UI y en el historial persistente
     if (queueResult.ok && queueResult.status === 'sent') {
+      if (localSaved?.id) {
+        await updateLocalPaymentStatus(localSaved.id, 'sent', 'HTTP 200 (OK)');
+      }
+
       await AsyncStorage.setItem('@yape_last_notification', JSON.stringify({
         time: new Date().toISOString(),
         text: parsed.rawText.substring(0, 80),
@@ -200,6 +211,15 @@ const headlessNotificationListener = async ({ notification }) => {
       // Intentar vaciar el resto de la cola en segundo plano si había pendientes
       flushQueue(sendToBackend).catch(() => {});
     } else {
+      const finalStatus = queueResult.status === 'duplicate_ignored' ? 'duplicate' : 'queued';
+      if (localSaved?.id) {
+        await updateLocalPaymentStatus(
+          localSaved.id,
+          finalStatus,
+          queueResult.error || (finalStatus === 'duplicate' ? 'Duplicado ignorado' : 'Encolado para reintento')
+        );
+      }
+
       await AsyncStorage.setItem('@yape_last_notification', JSON.stringify({
         time: new Date().toISOString(),
         text: parsed.rawText.substring(0, 80),
@@ -208,7 +228,7 @@ const headlessNotificationListener = async ({ notification }) => {
         amount: parsed.amount,
         sender: parsed.senderName,
         securityCode: parsed.securityCode,
-        status: queueResult.status === 'duplicate_ignored' ? 'duplicate' : 'queued',
+        status: finalStatus,
         error: queueResult.error || null,
         response: queueResult.error || 'Encolado',
       }));

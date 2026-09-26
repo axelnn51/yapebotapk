@@ -183,6 +183,7 @@ export default function DashboardScreen({ navigation }) {
           value={data?.pending_notifs || 0}
           color={Colors.info}
           bgColor={Colors.infoBg}
+          onPress={() => navigation.navigate('Yapes')}
         />
         <StatCard
           icon="⏱️"
@@ -215,6 +216,12 @@ export default function DashboardScreen({ navigation }) {
             <Text style={styles.actionLabel}>Pedidos</Text>
           </LinearGradient>
         </TouchableOpacity>
+        <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('Yapes')}>
+          <LinearGradient colors={['rgba(16,185,129,0.2)', 'rgba(16,185,129,0.05)']} style={styles.actionGradient}>
+            <Ionicons name="wallet" size={24} color={Colors.success} />
+            <Text style={styles.actionLabel}>Yapes</Text>
+          </LinearGradient>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('Reportes')}>
           <LinearGradient colors={['rgba(59,130,246,0.2)', 'rgba(59,130,246,0.05)']} style={styles.actionGradient}>
             <Ionicons name="bar-chart" size={24} color={Colors.info} />
@@ -230,7 +237,13 @@ export default function DashboardScreen({ navigation }) {
       </View>
 
       {/* Yape Reads (Notifications) */}
-      <Text style={[styles.sectionTitle, { marginTop: Spacing.xl }]}>Últimas Lecturas Yape</Text>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: Spacing.xl, marginBottom: Spacing.sm }}>
+        <Text style={[styles.sectionTitle, { marginTop: 0, marginBottom: 0 }]}>Últimas Lecturas Yape</Text>
+        <TouchableOpacity onPress={() => navigation.navigate('Yapes')} style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Text style={{ color: Colors.primaryLight, fontSize: FontSize.sm, fontWeight: '600', marginRight: 2 }}>Ver todos</Text>
+          <Ionicons name="chevron-forward" size={16} color={Colors.primaryLight} />
+        </TouchableOpacity>
+      </View>
       <View style={styles.readsContainer}>
         {notifications.length === 0 ? (
           <Text style={styles.emptyReads}>No hay lecturas recientes</Text>

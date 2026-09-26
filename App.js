@@ -11,6 +11,7 @@ import DashboardScreen from './src/screens/DashboardScreen';
 import PendingOrdersScreen from './src/screens/PendingOrdersScreen';
 import OrderDetailScreen from './src/screens/OrderDetailScreen';
 import ReportsScreen from './src/screens/ReportsScreen';
+import PaymentsScreen from './src/screens/PaymentsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import LogsScreen from './src/screens/LogsScreen';
 import { api } from './src/services/api';
@@ -225,6 +226,7 @@ export default function App() {
             const icons = {
               Dashboard: focused ? 'home' : 'home-outline',
               Pedidos: focused ? 'receipt' : 'receipt-outline',
+              Yapes: focused ? 'wallet' : 'wallet-outline',
               Reportes: focused ? 'stats-chart' : 'stats-chart-outline',
               Config: focused ? 'cog' : 'cog-outline',
             };
@@ -232,9 +234,10 @@ export default function App() {
           },
         })}
       >
-        <Tab.Screen name="Pedidos" component={OrdersStack} options={{ headerShown: false }} />
-        <Tab.Screen name="Reportes" component={ReportsScreen} />
         <Tab.Screen name="Dashboard" component={DashboardScreen} options={{ title: 'Dashboard' }} />
+        <Tab.Screen name="Pedidos" component={OrdersStack} options={{ headerShown: false }} />
+        <Tab.Screen name="Yapes" component={PaymentsScreen} options={{ title: 'Yapes y Pagos' }} />
+        <Tab.Screen name="Reportes" component={ReportsScreen} />
         <Tab.Screen name="Config" component={SettingsStack} options={{ headerShown: false, title: 'Configuración' }} />
       </Tab.Navigator>
     </NavigationContainer>

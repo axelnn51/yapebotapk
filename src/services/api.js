@@ -546,6 +546,19 @@ export const api = {
     }
   },
 
+  // Envío directo o reintento de pago entrante al backend autenticado
+  sendIncomingNotification: async (parsed) => {
+    return apiRequest('/incoming-notification', 'POST', {
+      sender: parsed.sender || parsed.senderName || parsed.title || parsed.provider || 'Yape/Plin',
+      text: parsed.rawText || parsed.text || '',
+      amount: parsed.amount,
+      securityCode: parsed.securityCode || parsed.security_code || null,
+      provider: parsed.provider || 'Yape',
+      packageName: parsed.packageName || '',
+      timestamp: parsed.timestamp || Date.now(),
+    });
+  },
+
   // Tests Internos — usa el endpoint protegido /api/test-webhook
   testWebhook: async (text) => {
     return apiRequest('/test-webhook', 'POST', { sender: 'Yape', text });

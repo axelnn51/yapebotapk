@@ -15,6 +15,7 @@ import {
   Modal,
   ActivityIndicator,
   Share,
+  Alert,
   Dimensions,
   Platform,
 } from 'react-native';
@@ -261,19 +262,31 @@ export default function PaymentsScreen() {
     if (!payment || retryingId) return;
     setRetryingId(payment.id);
     try {
-      const res = await api.testWebhook(payment.rawText || `${payment.sender} te envió S/ ${payment.amount}`);
-      if (res?.ok) {
-        await updateLocalPaymentStatus(payment.id, 'sent', 'Reenviado con éxito');
+      const res = await api.sendIncomingNotification({
+        sender: payment.sender,
+        amount: payment.amount,
+        securityCode: payment.securityCode,
+        provider: payment.provider,
+        rawText: payment.rawText,
+        packageName: payment.packageName,
+        timestamp: payment.timestamp,
+      });
+
+      if (res?.ok || res?.result || res?.status === 'ok') {
+        await updateLocalPaymentStatus(payment.id, 'sent', 'Reenviado con éxito al backend');
         if (selectedPayment) {
-          setSelectedPayment(prev => ({ ...prev, status: 'sent', response: 'Reenviado con éxito' }));
+          setSelectedPayment(prev => ({ ...prev, status: 'sent', response: 'Reenviado con éxito al backend' }));
         }
         try {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (e) {}
+        Alert.alert('Éxito', 'Pago reenviado y procesado correctamente por el servidor.');
         loadPaymentsData();
+      } else {
+        throw new Error(res?.error || 'El servidor no confirmó el procesamiento');
       }
     } catch (err) {
-      alert(`Error al reenviar: ${err.message}`);
+      Alert.alert('Error al reenviar', err.message || 'No se pudo contactar al servidor.');
     } finally {
       setRetryingId(null);
     }
@@ -365,7 +378,7 @@ export default function PaymentsScreen() {
             <View>
               <Text style={styles.heroSubtitle}>Ingresos Hoy (Capturas)</Text>
               <Text style={styles.heroAmount}>
-                +S/ {stats.totalToday.toFixed(2)}
+                +S/ {(stats?.totalToday || 0).toFixed(2)}
               </Text>
             </View>
             <View style={styles.heroCountBadge}>
@@ -551,7 +564,7 @@ export default function PaymentsScreen() {
                 <View style={styles.modalHeroAmount}>
                   <Text style={styles.modalAmountLabel}>Monto Abonado</Text>
                   <Text style={styles.modalAmountValue}>
-                    S/ {(selectedPayment.amount || 0).toFixed(2)}
+                    S/ {(Number(selectedPayment.amount) || 0).toFixed(2)}
                   </Text>
                 </View>
 

@@ -162,7 +162,7 @@ async function apiRequest(endpoint, method = 'GET', body = null) {
     if (body) options.body = JSON.stringify(body);
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    const timeout = setTimeout(() => controller.abort(), 25000);
     options.signal = controller.signal;
 
     try {
@@ -179,7 +179,11 @@ async function apiRequest(endpoint, method = 'GET', body = null) {
         data = JSON.parse(text);
       } catch (jsonErr) {
         if (!response.ok) {
+          if (response.status === 530 || text.includes('1033') || text.includes('Tunnel error')) {
+            throw new Error('Túnel Cloudflare desconectado (Error 1033/530). Verifica que el servidor o Portainer local esté encendido.');
+          }
           if (response.status === 521) throw new Error('Servidor caído (Cloudflare 521). Revisa el contenedor Docker.');
+          if (response.status === 520) throw new Error('Error Cloudflare (520). El backend cerró la conexión inesperadamente.');
           if (response.status === 502) throw new Error('Bad Gateway (502). El backend no responde.');
           if (response.status === 504) throw new Error('Gateway Timeout (504). El backend tardó demasiado.');
           if (response.status === 404) throw new Error(`Ruta /api${endpoint} no encontrada (404).`);
@@ -201,7 +205,7 @@ async function apiRequest(endpoint, method = 'GET', body = null) {
     } catch (error) {
       clearTimeout(timeout);
       if (error.name === 'AbortError') {
-        throw new Error('Timeout: el servidor no respondió en 15s.');
+        throw new Error('Timeout: el servidor tardó más de 25s en responder (conexión lenta).');
       }
       throw error;
     }

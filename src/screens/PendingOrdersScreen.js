@@ -42,19 +42,24 @@ export default function PendingOrdersScreen({ navigation }) {
         if (!isBackground) setLoading(false);
         return;
       }
-      setError(null);
       if (!isBackground) {
+        setError(null);
         api.invalidateCache();
       }
       const result = await api.getAllOrders(filter);
       setOrders(result.data || []);
+      setError(null);
     } catch (e) {
-      setError(e.message);
+      if (!isBackground || orders.length === 0) {
+        setError(e.message);
+      } else {
+        console.warn('Fallo en actualización en segundo plano (pedidos conservados):', e.message);
+      }
     } finally {
       if (!isBackground) setLoading(false);
       setRefreshing(false);
     }
-  }, [filter]);
+  }, [filter, orders.length]);
 
   useFocusEffect(
     useCallback(() => {

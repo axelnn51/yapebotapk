@@ -32,7 +32,7 @@ export const BANK_PACKAGES = {
  */
 export function extractFullText(notif) {
   if (!notif) return '';
-  const parts = [
+  const rawParts = [
     notif.title || '',
     notif.titleBig || '',
     notif.text || '',
@@ -45,18 +45,36 @@ export function extractFullText(notif) {
   // Si existen groupedMessages
   if (Array.isArray(notif.groupedMessages)) {
     notif.groupedMessages.forEach(m => {
-      if (typeof m === 'string') parts.push(m);
-      else if (m && m.text) parts.push(m.text);
+      if (typeof m === 'string') rawParts.push(m);
+      else if (m && m.text) rawParts.push(m.text);
     });
   }
 
-  // Unir y limpiar espacios duplicados manteniendo coherencia
-  const combined = parts
-    .map(p => (typeof p === 'string' ? p.trim() : ''))
-    .filter(p => p.length > 0)
-    .join(' | ');
+  // Deduplicar inteligentemente partes redundantes o idénticas
+  const cleanParts = [];
+  for (const part of rawParts) {
+    if (typeof part !== 'string') continue;
+    const trimmed = part.trim();
+    if (!trimmed) continue;
 
-  return combined;
+    // Si ya existe idéntico o si ya está contenido en un fragmento más largo
+    const isSub = cleanParts.some(existing =>
+      existing.toLowerCase() === trimmed.toLowerCase() ||
+      (existing.length > trimmed.length && existing.toLowerCase().includes(trimmed.toLowerCase()))
+    );
+    if (!isSub) {
+      const prevIdx = cleanParts.findIndex(existing =>
+        trimmed.length > existing.length && trimmed.toLowerCase().includes(existing.toLowerCase())
+      );
+      if (prevIdx !== -1) {
+        cleanParts[prevIdx] = trimmed;
+      } else {
+        cleanParts.push(trimmed);
+      }
+    }
+  }
+
+  return cleanParts.join(' | ');
 }
 
 /**
@@ -341,10 +359,14 @@ export function parseBankNotification(rawNotification) {
   const hasPaymentKeyword = paymentKeywords.some(kw => fullLower.includes(kw));
   const isPayment = amount !== null && amount > 0 && hasPaymentKeyword && !isSystemNotification;
 
-  // 5. Generar texto limpio para el backend
-  const primaryCandidates = [rawNotification.bigText, rawNotification.text, fullText];
-  const longestPrimary = primaryCandidates.reduce((a, b) => ((b && b.length > (a ? a.length : 0)) ? b : a), '');
-  const cleanMessage = (longestPrimary || fullText).replace(/\s+/g, ' ').trim();
+  // 5. Generar texto limpio para el backend (oración única sin repeticiones)
+  let bestCandidate = rawNotification.bigText || rawNotification.text || '';
+  if (!bestCandidate || bestCandidate.length < 15) {
+    bestCandidate = fullText;
+  }
+  // Eliminar prefijos repetidos tipo "Confirmación de Pago | "
+  let cleanMessage = bestCandidate.replace(/^(?:confirmaci[oó]n\s+de\s+pago|yape!)\s*\|?\s*/i, '').trim();
+  cleanMessage = cleanMessage.replace(/\s+/g, ' ').trim();
 
   return {
     isPayment,

@@ -1,7 +1,7 @@
 // ============================================================
-// PaymentsScreen — YapeBot Mobile (v3.4)
+// PaymentsScreen — YapeBot Mobile (v3.5)
 // Pantalla dedicada de Yapes y Pagos Recibidos en tiempo real
-// Inspirada en Vuelto: KPIs, Búsqueda, Filtros de Banco y Modal de Detalle
+// Filtros por Día (Hoy, Ayer, Específico, Histórico) + Banco + Búsqueda
 // ============================================================
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
@@ -85,23 +85,63 @@ const PROVIDER_THEMES = {
   },
 };
 
+// Formato de fecha YYYY-MM-DD en Zona Horaria Perú (America/Lima)
+const getPeruDateString = (timestampOrDate = new Date()) => {
+  try {
+    const d = new Date(timestampOrDate);
+    if (isNaN(d.getTime())) return '';
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Lima',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(d);
+  } catch (e) {
+    const d = new Date(timestampOrDate);
+    return !isNaN(d.getTime()) ? d.toISOString().split('T')[0] : '';
+  }
+};
+
+const getYesterdayPeruDateString = () => {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return getPeruDateString(d);
+};
+
+const formatDisplayDate = (dateStr) => {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  const [y, m, d] = parts;
+  const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Set', 'Oct', 'Nov', 'Dic'];
+  const monthName = months[parseInt(m, 10) - 1] || m;
+  return `${parseInt(d, 10)} ${monthName} ${y}`;
+};
+
+const formatChipLabel = (dateStr) => {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  const [_, m, d] = parts;
+  const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Set', 'Oct', 'Nov', 'Dic'];
+  const monthName = months[parseInt(m, 10) - 1] || m;
+  return `${parseInt(d, 10)} ${monthName}`;
+};
+
 export default function PaymentsScreen() {
   const [payments, setPayments] = useState([]);
-  const [stats, setStats] = useState({
-    totalToday: 0,
-    countToday: 0,
-    byProviderToday: {},
-  });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProvider, setSelectedProvider] = useState('ALL');
   const [selectedStatus, setSelectedStatus] = useState('ALL');
+  const [selectedDate, setSelectedDate] = useState('TODAY'); // 'TODAY', 'YESTERDAY', 'ALL', o 'YYYY-MM-DD'
+  const [availableDates, setAvailableDates] = useState([]);
   const [selectedPayment, setSelectedPayment] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [retryingId, setRetryingId] = useState(null);
 
-  // Formateador de fecha horario Perú
+  // Formateador de fecha horario Perú para items de lista
   const formatDate = (isoStringOrTimestamp) => {
     if (!isoStringOrTimestamp) return 'Reciente';
     try {
@@ -119,18 +159,45 @@ export default function PaymentsScreen() {
     }
   };
 
-  // Carga y consolidación de pagos locales + remotos
-  const loadPaymentsData = useCallback(async (showLoading = false) => {
+  // Carga y consolidación de pagos locales + remotos con soporte de filtro de fecha
+  const loadPaymentsData = useCallback(async (dateFilter = selectedDate, showLoading = false) => {
     if (showLoading) setLoading(true);
     try {
-      // 1. Obtener historial local de pagos capturados
-      const localList = await getLocalPayments();
-      const localStats = await getPaymentsStats();
+      const todayStr = getPeruDateString();
+      const yesterdayStr = getYesterdayPeruDateString();
 
-      // 2. Intentar obtener últimas notificaciones registradas en el backend
+      let targetDateParam = null;
+      if (dateFilter === 'TODAY') {
+        targetDateParam = todayStr;
+      } else if (dateFilter === 'YESTERDAY') {
+        targetDateParam = yesterdayStr;
+      } else if (dateFilter !== 'ALL' && dateFilter) {
+        targetDateParam = dateFilter;
+      }
+
+      // 1. Cargar fechas disponibles en paralelo desde el backend
+      api.getNotificationDates().then(res => {
+        if (res?.ok && Array.isArray(res.data) && res.data.length > 0) {
+          setAvailableDates(res.data);
+        }
+      }).catch(() => {});
+
+      // 2. Obtener historial local de pagos capturados
+      const localList = await getLocalPayments();
+
+      // Filtrar locales por fecha si aplica
+      let filteredLocal = localList;
+      if (targetDateParam) {
+        filteredLocal = localList.filter(item => {
+          const itemDate = getPeruDateString(item.timestamp || item.dateFormatted);
+          return itemDate === targetDateParam;
+        });
+      }
+
+      // 3. Obtener notificaciones desde el backend (con filtro de fecha si aplica)
       let remoteList = [];
       try {
-        const res = await api.getNotifications(40);
+        const res = await api.getNotifications(60, targetDateParam);
         if (res?.ok && Array.isArray(res.data)) {
           remoteList = res.data.map(item => ({
             id: `REMOTE_${item.id || item.timestamp}`,
@@ -148,21 +215,21 @@ export default function PaymentsScreen() {
         // En caso offline o backend ocupado, se continúa con datos locales
       }
 
-      // 3. Fusionar evitando duplicados cercanos
+      // 4. Fusionar evitando duplicados cercanos
       const mergedMap = new Map();
 
-      // Priorizar datos locales (tienen ID determinista y rawText nativo de Android)
-      localList.forEach(item => {
+      // Priorizar datos locales
+      filteredLocal.forEach(item => {
         mergedMap.set(item.id, item);
       });
 
-      // Añadir remotos si no coinciden aproximadamente en monto y remitente
+      // Añadir remotos si no coinciden aproximadamente en monto, remitente y tiempo
       remoteList.forEach(r => {
-        const isAlreadyPresent = localList.some(loc => {
+        const isAlreadyPresent = filteredLocal.some(loc => {
           const timeDiff = Math.abs((loc.timestamp || 0) - (r.timestamp || 0));
           return Math.abs((loc.amount || 0) - (r.amount || 0)) < 0.01 &&
             (loc.sender || '').toLowerCase().trim() === (r.sender || '').toLowerCase().trim() &&
-            timeDiff < 120000; // dentro de 2 minutos
+            timeDiff < 120000;
         });
 
         if (!isAlreadyPresent) {
@@ -177,19 +244,18 @@ export default function PaymentsScreen() {
       });
 
       setPayments(combined);
-      setStats(localStats);
     } catch (e) {
       console.warn('[PaymentsScreen] Error cargando pagos:', e.message);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [selectedDate]);
 
   useFocusEffect(
     useCallback(() => {
-      loadPaymentsData(payments.length === 0);
-    }, [loadPaymentsData, payments.length])
+      loadPaymentsData(selectedDate, payments.length === 0);
+    }, [loadPaymentsData, selectedDate, payments.length])
   );
 
   const onRefresh = () => {
@@ -197,10 +263,64 @@ export default function PaymentsScreen() {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (e) {}
-    loadPaymentsData();
+    loadPaymentsData(selectedDate, false);
   };
 
-  // Filtrado de pagos
+  const handleSelectDate = (dateOption) => {
+    try {
+      Haptics.selectionAsync();
+    } catch (e) {}
+    setSelectedDate(dateOption);
+    loadPaymentsData(dateOption, true);
+  };
+
+  // Cálculo dinámico de métricas del período seleccionado
+  const { periodTotal, periodCount, periodBreakdown, heroTitle } = useMemo(() => {
+    let total = 0;
+    let count = 0;
+    const breakdown = { Yape: 0, Plin: 0, InterbankBcp: 0, Otros: 0 };
+
+    payments.forEach(item => {
+      const amt = typeof item.amount === 'number' ? item.amount : parseFloat(item.amount || 0);
+      if (!isNaN(amt)) {
+        total += amt;
+        count += 1;
+        const prov = (item.provider || 'Otro').toLowerCase();
+        if (prov.includes('yape')) {
+          breakdown.Yape += amt;
+        } else if (prov.includes('plin')) {
+          breakdown.Plin += amt;
+        } else if (prov.includes('interbank') || prov.includes('bcp')) {
+          breakdown.InterbankBcp += amt;
+        } else {
+          breakdown.Otros += amt;
+        }
+      }
+    });
+
+    let title = 'Ingresos Hoy (Capturas)';
+    const todayStr = getPeruDateString();
+    const yesterdayStr = getYesterdayPeruDateString();
+
+    if (selectedDate === 'TODAY' || selectedDate === todayStr) {
+      title = 'Ingresos Hoy (Capturas)';
+    } else if (selectedDate === 'YESTERDAY' || selectedDate === yesterdayStr) {
+      title = 'Ingresos de Ayer';
+    } else if (selectedDate === 'ALL') {
+      title = 'Total Recaudado (Histórico)';
+    } else {
+      title = `Ingresos: ${formatDisplayDate(selectedDate)}`;
+    }
+
+    return {
+      periodTotal: total,
+      periodCount: count,
+      periodBreakdown: breakdown,
+      heroTitle: title,
+    };
+  }, [payments, selectedDate]);
+
+  // Filtrado por Proveedor, Estado y Búsqueda sobre los pagos del día seleccionado
   const filteredPayments = useMemo(() => {
     return payments.filter(item => {
       // 1. Filtro por Proveedor
@@ -281,7 +401,7 @@ export default function PaymentsScreen() {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (e) {}
         Alert.alert('Éxito', 'Pago reenviado y procesado correctamente por el servidor.');
-        loadPaymentsData();
+        loadPaymentsData(selectedDate);
       } else {
         throw new Error(res?.error || 'El servidor no confirmó el procesamiento');
       }
@@ -291,6 +411,30 @@ export default function PaymentsScreen() {
       setRetryingId(null);
     }
   };
+
+  // Construcción de la lista de chips de fecha
+  const dateFilterChips = useMemo(() => {
+    const todayStr = getPeruDateString();
+    const yesterdayStr = getYesterdayPeruDateString();
+
+    const chips = [
+      { id: 'TODAY', label: '📅 Hoy' },
+      { id: 'YESTERDAY', label: '⏪ Ayer' },
+      { id: 'ALL', label: '🗓️ Histórico' },
+    ];
+
+    // Agregar fechas del backend que no sean hoy ni ayer
+    availableDates.forEach(dateStr => {
+      if (dateStr !== todayStr && dateStr !== yesterdayStr) {
+        chips.push({
+          id: dateStr,
+          label: formatChipLabel(dateStr),
+        });
+      }
+    });
+
+    return chips;
+  }, [availableDates]);
 
   const renderPaymentItem = ({ item }) => {
     const provTheme = PROVIDER_THEMES[item.provider] || PROVIDER_THEMES.Otro;
@@ -305,7 +449,6 @@ export default function PaymentsScreen() {
         onPress={() => handleOpenDetail(item)}
       >
         <View style={styles.cardLeft}>
-          {/* Avatar del banco */}
           <View style={[styles.avatar, { backgroundColor: provTheme.bg, borderColor: provTheme.color }]}>
             <Ionicons name={provTheme.icon} size={20} color={provTheme.color} />
           </View>
@@ -366,7 +509,7 @@ export default function PaymentsScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Resumen Superior / KPIs (Inspirado en Vuelto) */}
+      {/* Resumen Dinámico Superior / KPIs del Período Seleccionado */}
       <View style={styles.header}>
         <LinearGradient
           colors={['#10b981', '#059669']}
@@ -376,41 +519,65 @@ export default function PaymentsScreen() {
         >
           <View style={styles.heroHeader}>
             <View>
-              <Text style={styles.heroSubtitle}>Ingresos Hoy (Capturas)</Text>
+              <Text style={styles.heroSubtitle}>{heroTitle}</Text>
               <Text style={styles.heroAmount}>
-                +S/ {(stats?.totalToday || 0).toFixed(2)}
+                +S/ {periodTotal.toFixed(2)}
               </Text>
             </View>
             <View style={styles.heroCountBadge}>
               <Ionicons name="flash" size={16} color="#10b981" />
-              <Text style={styles.heroCountText}>{stats.countToday} pagos</Text>
+              <Text style={styles.heroCountText}>{periodCount} pagos</Text>
             </View>
           </View>
 
-          {/* Mini desglose Yape vs Plin vs Otros */}
+          {/* Desglose dinámico por proveedor */}
           <View style={styles.providerBreakdown}>
             <View style={styles.breakdownItem}>
               <Text style={styles.breakdownLabel}>🟣 Yape</Text>
               <Text style={styles.breakdownValue}>
-                S/ {(stats.byProviderToday?.Yape?.amount || 0).toFixed(0)}
+                S/ {periodBreakdown.Yape.toFixed(0)}
               </Text>
             </View>
             <View style={styles.breakdownDivider} />
             <View style={styles.breakdownItem}>
               <Text style={styles.breakdownLabel}>🟢 Plin</Text>
               <Text style={styles.breakdownValue}>
-                S/ {(stats.byProviderToday?.Plin?.amount || 0).toFixed(0)}
+                S/ {periodBreakdown.Plin.toFixed(0)}
               </Text>
             </View>
             <View style={styles.breakdownDivider} />
             <View style={styles.breakdownItem}>
-              <Text style={styles.breakdownLabel}>🔵 Interbank/BCP</Text>
+              <Text style={styles.breakdownLabel}>🔵 Otros</Text>
               <Text style={styles.breakdownValue}>
-                S/ {((stats.byProviderToday?.Interbank?.amount || 0) + (stats.byProviderToday?.BCP?.amount || 0)).toFixed(0)}
+                S/ {(periodBreakdown.InterbankBcp + periodBreakdown.Otros).toFixed(0)}
               </Text>
             </View>
           </View>
         </LinearGradient>
+      </View>
+
+      {/* Selector Horizontal de Fechas */}
+      <View style={styles.dateFilterContainer}>
+        <FlatList
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.dateFilterList}
+          data={dateFilterChips}
+          keyExtractor={item => item.id}
+          renderItem={({ item }) => {
+            const isSelected = selectedDate === item.id;
+            return (
+              <TouchableOpacity
+                style={[styles.dateChip, isSelected && styles.dateChipActive]}
+                onPress={() => handleSelectDate(item.id)}
+              >
+                <Text style={[styles.dateChipText, isSelected && styles.dateChipTextActive]}>
+                  {item.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          }}
+        />
       </View>
 
       {/* Barra de Búsqueda */}
@@ -471,7 +638,7 @@ export default function PaymentsScreen() {
       {loading && !refreshing ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={Colors.primary} />
-          <Text style={styles.loadingText}>Cargando pagos recibidos...</Text>
+          <Text style={styles.loadingText}>Cargando pagos...</Text>
         </View>
       ) : (
         <FlatList
@@ -497,18 +664,19 @@ export default function PaymentsScreen() {
               <Text style={styles.emptySubtitle}>
                 {searchQuery || selectedProvider !== 'ALL'
                   ? 'No hay resultados para los filtros seleccionados.'
-                  : 'Los Yapes, Plins y transferencias capturados por el listener aparecerán aquí en tiempo real.'}
+                  : `No se encontraron notificaciones de pago para el período seleccionado (${selectedDate}).`}
               </Text>
-              {(searchQuery || selectedProvider !== 'ALL') && (
+              {(searchQuery || selectedProvider !== 'ALL' || selectedDate !== 'TODAY') && (
                 <TouchableOpacity
                   style={styles.resetFiltersBtn}
                   onPress={() => {
                     setSearchQuery('');
                     setSelectedProvider('ALL');
                     setSelectedStatus('ALL');
+                    handleSelectDate('TODAY');
                   }}
                 >
-                  <Text style={styles.resetFiltersText}>Restablecer Filtros</Text>
+                  <Text style={styles.resetFiltersText}>Ver Pagos de Hoy</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -750,10 +918,40 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
+  // Selector de Fechas
+  dateFilterContainer: {
+    marginTop: Spacing.sm,
+  },
+  dateFilterList: {
+    paddingHorizontal: Spacing.md,
+    gap: 8,
+  },
+  dateChip: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  dateChipActive: {
+    backgroundColor: '#059669',
+    borderColor: '#10b981',
+  },
+  dateChipText: {
+    color: Colors.textSecondary,
+    fontSize: FontSize.xs,
+    fontWeight: '600',
+  },
+  dateChipTextActive: {
+    color: '#ffffff',
+    fontWeight: '800',
+  },
+
   // Barra de búsqueda
   searchSection: {
     paddingHorizontal: Spacing.md,
-    marginTop: Spacing.sm,
+    marginTop: Spacing.xs,
   },
   searchBar: {
     flexDirection: 'row',
@@ -777,9 +975,9 @@ const styles = StyleSheet.create({
     padding: 4,
   },
 
-  // Filtros
+  // Filtros de banco
   filterSection: {
-    marginVertical: Spacing.sm,
+    marginVertical: Spacing.xs,
   },
   filterList: {
     paddingHorizontal: Spacing.md,
@@ -788,7 +986,7 @@ const styles = StyleSheet.create({
   filterChip: {
     backgroundColor: Colors.bgCard,
     paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingVertical: 6,
     borderRadius: BorderRadius.full,
     borderWidth: 1,
     borderColor: Colors.border,

@@ -507,8 +507,17 @@ export const api = {
   getWeeklyReport: () => apiRequest('/reports/weekly'),
   getMonthlyReport: () => apiRequest('/reports/monthly'),
 
-  // Notificaciones
-  getNotifications: (limit = 20) => apiRequest(`/notifications?limit=${limit}`),
+  // Notificaciones con filtro opcional de fecha
+  getNotifications: (limit = 40, date = null) => {
+    let qs = `?limit=${limit}`;
+    if (date) qs += `&date=${date}`;
+    return apiRequest(`/notifications${qs}`);
+  },
+  getNotificationDates: () => apiRequest('/notifications?dates=true'),
+
+  // Generador de Pedidos CID (integración GETCID)
+  createCidOrder: (data) => apiRequest('/cid/create-order', 'POST', data),
+  getCidOrders: (limit = 30) => apiRequest(`/cid/orders?limit=${limit}`),
 
   // v3: Logs del sistema
   getLogs: (limit = 50, level = null, category = null) => {

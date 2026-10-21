@@ -21,6 +21,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Haptics from 'expo-haptics';
 import { Colors, Spacing, FontSize, BorderRadius } from '../theme/colors';
 import { api } from '../services/api';
 
@@ -33,7 +34,7 @@ try {
 
 const QUICK_CREDITS = [1, 2, 3, 5, 10];
 
-export default function CreateCidOrderScreen() {
+export default function CreateCidOrderScreen({ route, navigation }) {
   const [credits, setCredits] = useState(1);
   const [customOrderId, setCustomOrderId] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
@@ -41,6 +42,7 @@ export default function CreateCidOrderScreen() {
   const [createdOrder, setCreatedOrder] = useState(null);
   const [recentOrders, setRecentOrders] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [wooOrders, setWooOrders] = useState([]);
   const [copiedId, setCopiedId] = useState(null);
 
   // Generador de número aleatorio CDK-XXXXX
@@ -51,8 +53,36 @@ export default function CreateCidOrderScreen() {
 
   // Al abrir la pantalla, sugerir un número de pedido nuevo
   useEffect(() => {
-    setCustomOrderId(generateRandomOrderId());
-  }, [generateRandomOrderId]);
+    if (!route?.params?.orderId) {
+      setCustomOrderId(generateRandomOrderId());
+    }
+  }, [generateRandomOrderId, route?.params?.orderId]);
+
+  // Si proviene de navegación externa (ej: OrderDetailScreen con pedido #14748)
+  useEffect(() => {
+    if (route?.params?.orderId) {
+      const incomingId = String(route.params.orderId).trim().replace(/^#+/, '');
+      setCustomOrderId(incomingId);
+      if (route.params.email) {
+        setCustomerEmail(route.params.email);
+      }
+      if (route.params.suggestedCredits) {
+        setCredits(Math.max(1, parseInt(route.params.suggestedCredits, 10) || 1));
+      }
+    }
+  }, [route?.params?.orderId, route?.params?.email, route?.params?.suggestedCredits]);
+
+  // Cargar pedidos recientes de WooCommerce para autocompletado rápido
+  const loadWooOrders = useCallback(async () => {
+    try {
+      const res = await api.getPendingOrders();
+      if (res?.ok && Array.isArray(res.data)) {
+        setWooOrders(res.data.slice(0, 8));
+      }
+    } catch (e) {
+      // Ignorar fallo silenciosamente
+    }
+  }, []);
 
   // Cargar historial de pedidos CDK
   const loadHistory = useCallback(async () => {
@@ -72,15 +102,17 @@ export default function CreateCidOrderScreen() {
   useFocusEffect(
     useCallback(() => {
       loadHistory();
-    }, [loadHistory])
+      loadWooOrders();
+    }, [loadHistory, loadWooOrders])
   );
 
   // Generar texto para el cliente
   const buildClientText = (orderId, numCredits) => {
+    const cleanId = String(orderId || '').replace(/^#+/, '');
     return (
       `Hola! Puedes activar tu software en nuestro portal oficial:\n` +
       `🌐 https://getcid.cdkeysperu.com/\n` +
-      `Ingresa tu N° de pedido: ${orderId}\n` +
+      `Ingresa tu N° de pedido: #${cleanId}\n` +
       `Cuentas con ${numCredits} activación(es) disponible(s).`
     );
   };
@@ -250,6 +282,66 @@ export default function CreateCidOrderScreen() {
               <Text style={styles.actionBtnText}>WhatsApp</Text>
             </TouchableOpacity>
           </View>
+
+          {/* Botón Solicitado: 🧾 Pedido N.° #[Número] */}
+          <View style={styles.orderNumberRow}>
+            <TouchableOpacity
+              style={[
+                styles.orderNumberBtn,
+                copiedId === 'orderNumber' && styles.orderNumberBtnCopied,
+              ]}
+              activeOpacity={0.8}
+              onPress={() => {
+                const cleanId = String(createdOrder.orderId).replace(/^#+/, '');
+                handleCopyText(`🧾 Pedido N.° #${cleanId}`, 'orderNumber');
+              }}
+            >
+              <View style={styles.orderNumberLeft}>
+                <Ionicons
+                  name={copiedId === 'orderNumber' ? 'checkmark-circle' : 'receipt'}
+                  size={18}
+                  color={copiedId === 'orderNumber' ? Colors.success : '#facc15'}
+                />
+                <Text style={styles.orderNumberText} numberOfLines={1}>
+                  {copiedId === 'orderNumber'
+                    ? '¡Copiado al Portapapeles!'
+                    : `🧾 Pedido N.° #${String(createdOrder.orderId).replace(/^#+/, '')}`}
+                </Text>
+              </View>
+
+              <View
+                style={[
+                  styles.orderNumberCopyTag,
+                  copiedId === 'orderNumber' && styles.orderNumberCopyTagActive,
+                ]}
+              >
+                <Ionicons
+                  name={copiedId === 'orderNumber' ? 'checkmark' : 'copy-outline'}
+                  size={13}
+                  color={copiedId === 'orderNumber' ? '#ffffff' : '#cbd5e1'}
+                />
+                <Text
+                  style={[
+                    styles.orderNumberCopyTagText,
+                    copiedId === 'orderNumber' && { color: '#ffffff' },
+                  ]}
+                >
+                  {copiedId === 'orderNumber' ? 'Copiado' : 'Copiar'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.orderNumberWaBtn}
+              activeOpacity={0.8}
+              onPress={() => {
+                const cleanId = String(createdOrder.orderId).replace(/^#+/, '');
+                handleShareWhatsApp(`🧾 Pedido N.° #${cleanId}`);
+              }}
+            >
+              <Ionicons name="logo-whatsapp" size={18} color="#ffffff" />
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -300,6 +392,56 @@ export default function CreateCidOrderScreen() {
         </View>
 
         <Text style={[styles.sectionTitle, { marginTop: Spacing.lg }]}>2. Número de Pedido</Text>
+
+        {/* Chips de Selección Rápida desde Pedidos WooCommerce */}
+        {wooOrders && wooOrders.length > 0 && (
+          <View style={styles.wooSelectorContainer}>
+            <Text style={styles.wooSelectorLabel}>⚡ Seleccionar pedido reciente de tienda:</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.wooSelectorList}
+            >
+              {wooOrders.map(wo => {
+                const woId = String(wo.id).replace(/^#+/, '');
+                const isSelected = customOrderId === woId || customOrderId === `#${woId}`;
+                return (
+                  <TouchableOpacity
+                    key={wo.id}
+                    style={[styles.wooChip, isSelected && styles.wooChipActive]}
+                    onPress={() => {
+                      try { Haptics.selectionAsync(); } catch (e) {}
+                      setCustomOrderId(woId);
+                      if (wo.customer?.email) setCustomerEmail(wo.customer.email);
+                      if (wo.items?.length) {
+                        const sum = wo.items.reduce((acc, it) => acc + (parseInt(it.qty, 10) || 1), 0);
+                        if (sum > 0) setCredits(sum);
+                      }
+                    }}
+                  >
+                    <Ionicons
+                      name="receipt-outline"
+                      size={13}
+                      color={isSelected ? '#ffffff' : '#facc15'}
+                    />
+                    <Text style={[styles.wooChipText, isSelected && styles.wooChipTextActive]}>
+                      #{wo.id}
+                    </Text>
+                    {wo.customer?.first_name ? (
+                      <Text
+                        style={[styles.wooChipName, isSelected && { color: '#e0e7ff' }]}
+                        numberOfLines={1}
+                      >
+                        {wo.customer.first_name}
+                      </Text>
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
+
         <View style={styles.orderIdRow}>
           <View style={styles.orderIdInputBox}>
             <Ionicons name="pricetag-outline" size={18} color={Colors.textMuted} style={{ marginRight: 8 }} />
@@ -406,6 +548,30 @@ export default function CreateCidOrderScreen() {
                           : `0/${item.credits} agotado`}
                       </Text>
                     </View>
+                    <TouchableOpacity
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        const cleanId = String(item.order_id).replace(/^#+/, '');
+                        handleCopyText(`🧾 Pedido N.° #${cleanId}`, `hist_order_${item.order_id}`);
+                      }}
+                      style={styles.historyOrderIdTag}
+                    >
+                      <Ionicons
+                        name={copiedId === `hist_order_${item.order_id}` ? 'checkmark' : 'receipt-outline'}
+                        size={12}
+                        color={copiedId === `hist_order_${item.order_id}` ? Colors.success : '#facc15'}
+                      />
+                      <Text
+                        style={[
+                          styles.historyOrderIdTagText,
+                          copiedId === `hist_order_${item.order_id}` && { color: Colors.success },
+                        ]}
+                      >
+                        {copiedId === `hist_order_${item.order_id}`
+                          ? '¡Copiado!'
+                          : `🧾 Pedido N.° #${String(item.order_id).replace(/^#+/, '')}`}
+                      </Text>
+                    </TouchableOpacity>
                     <Text style={styles.historyDateText}>
                       {item.created_at ? item.created_at.replace('T', ' ').substring(0, 16) : 'Reciente'}
                     </Text>
@@ -836,5 +1002,129 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(16, 185, 129, 0.15)',
     padding: 8,
     borderRadius: BorderRadius.sm,
+  },
+
+  // Botón Prominente "🧾 Pedido N.° #14748"
+  orderNumberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+  },
+  orderNumberBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#181836',
+    borderColor: '#7c3aed',
+    borderWidth: 1.5,
+    borderRadius: BorderRadius.md,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  orderNumberBtnCopied: {
+    borderColor: Colors.success,
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+  },
+  orderNumberLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  orderNumberText: {
+    color: '#ffffff',
+    fontSize: FontSize.sm,
+    fontWeight: '800',
+    flexShrink: 1,
+  },
+  orderNumberCopyTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.full,
+  },
+  orderNumberCopyTagActive: {
+    backgroundColor: Colors.success,
+  },
+  orderNumberCopyTagText: {
+    color: '#cbd5e1',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  orderNumberWaBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.md,
+    backgroundColor: '#10b981',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // Selector de pedidos recientes WooCommerce
+  wooSelectorContainer: {
+    marginBottom: Spacing.sm,
+  },
+  wooSelectorLabel: {
+    color: Colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  wooSelectorList: {
+    gap: 8,
+    paddingBottom: 2,
+  },
+  wooChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  wooChipActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primaryLight,
+  },
+  wooChipText: {
+    color: '#facc15',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  wooChipTextActive: {
+    color: '#ffffff',
+  },
+  wooChipName: {
+    color: Colors.textMuted,
+    fontSize: 11,
+    maxWidth: 80,
+  },
+
+  // Tag en items de historial
+  historyOrderIdTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(250, 204, 21, 0.1)',
+    borderColor: 'rgba(250, 204, 21, 0.3)',
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginTop: 2,
+    alignSelf: 'flex-start',
+  },
+  historyOrderIdTagText: {
+    color: '#facc15',
+    fontSize: 10,
+    fontWeight: '700',
   },
 });

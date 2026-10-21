@@ -370,6 +370,7 @@ export function parseBankNotification(rawNotification) {
 
   return {
     isPayment,
+    isValid: isPayment, // retrocompatibilidad con llamadas que verifican .isValid
     provider,
     amount,
     senderName: senderName || 'Cliente',

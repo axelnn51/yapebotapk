@@ -97,8 +97,15 @@ const getPeruDateString = (timestampOrDate = new Date()) => {
       day: '2-digit',
     }).format(d);
   } catch (e) {
-    const d = new Date(timestampOrDate);
-    return !isNaN(d.getTime()) ? d.toISOString().split('T')[0] : '';
+    try {
+      const d = new Date(timestampOrDate);
+      if (isNaN(d.getTime())) return '';
+      // Offset Perú UTC-5
+      const peruTime = new Date(d.getTime() - (5 * 60 * 60 * 1000));
+      return peruTime.toISOString().split('T')[0];
+    } catch (err) {
+      return '';
+    }
   }
 };
 
@@ -108,8 +115,9 @@ const getYesterdayPeruDateString = () => {
   return getPeruDateString(d);
 };
 
-const formatDisplayDate = (dateStr) => {
-  if (!dateStr) return '';
+const formatDisplayDate = (val) => {
+  const dateStr = typeof val === 'string' ? val : (val?.date || '');
+  if (!dateStr || typeof dateStr !== 'string') return '';
   const parts = dateStr.split('-');
   if (parts.length !== 3) return dateStr;
   const [y, m, d] = parts;
@@ -118,8 +126,9 @@ const formatDisplayDate = (dateStr) => {
   return `${parseInt(d, 10)} ${monthName} ${y}`;
 };
 
-const formatChipLabel = (dateStr) => {
-  if (!dateStr) return '';
+const formatChipLabel = (val) => {
+  const dateStr = typeof val === 'string' ? val : (val?.date || '');
+  if (!dateStr || typeof dateStr !== 'string') return '';
   const parts = dateStr.split('-');
   if (parts.length !== 3) return dateStr;
   const [_, m, d] = parts;
@@ -178,7 +187,12 @@ export default function PaymentsScreen() {
       // 1. Cargar fechas disponibles en paralelo desde el backend
       api.getNotificationDates().then(res => {
         if (res?.ok && Array.isArray(res.data) && res.data.length > 0) {
-          setAvailableDates(res.data);
+          const extracted = res.data.map(item => {
+            if (typeof item === 'string') return item;
+            if (item && typeof item === 'object' && item.date) return item.date;
+            return null;
+          }).filter(Boolean);
+          setAvailableDates(extracted);
         }
       }).catch(() => {});
 
@@ -199,17 +213,27 @@ export default function PaymentsScreen() {
       try {
         const res = await api.getNotifications(60, targetDateParam);
         if (res?.ok && Array.isArray(res.data)) {
-          remoteList = res.data.map(item => ({
-            id: `REMOTE_${item.id || item.timestamp}`,
-            amount: typeof item.amount === 'number' ? item.amount : parseFloat(item.amount || 0),
-            sender: item.sender || 'Cliente',
-            provider: item.provider || (item.sender?.toLowerCase().includes('plin') ? 'Plin' : 'Yape'),
-            securityCode: item.security_code || null,
-            rawText: item.text || item.rawText || '',
-            timestamp: item.created_at ? new Date(item.created_at).getTime() : Date.now(),
-            status: 'sent',
-            isRemote: true,
-          }));
+          remoteList = res.data.map(item => {
+            let ts = Date.now();
+            if (item.created_at) {
+              const parsedTs = new Date(String(item.created_at).replace(' ', 'T')).getTime();
+              if (!isNaN(parsedTs)) ts = parsedTs;
+            } else if (item.timestamp) {
+              ts = Number(item.timestamp) || Date.now();
+            }
+
+            return {
+              id: `REMOTE_${item.id || ts}`,
+              amount: typeof item.amount === 'number' ? item.amount : parseFloat(item.amount || 0),
+              sender: item.sender || 'Cliente',
+              provider: item.provider || (item.sender?.toLowerCase().includes('plin') ? 'Plin' : 'Yape'),
+              securityCode: item.security_code || null,
+              rawText: item.raw_text || item.text || item.rawText || '',
+              timestamp: ts,
+              status: 'sent',
+              isRemote: true,
+            };
+          });
         }
       } catch (backendErr) {
         // En caso offline o backend ocupado, se continúa con datos locales
@@ -424,14 +448,19 @@ export default function PaymentsScreen() {
     ];
 
     // Agregar fechas del backend que no sean hoy ni ayer
-    availableDates.forEach(dateStr => {
-      if (dateStr !== todayStr && dateStr !== yesterdayStr) {
-        chips.push({
-          id: dateStr,
-          label: formatChipLabel(dateStr),
-        });
-      }
-    });
+    if (Array.isArray(availableDates)) {
+      availableDates.forEach(item => {
+        const dateStr = typeof item === 'string' ? item : (item?.date || '');
+        if (dateStr && dateStr !== todayStr && dateStr !== yesterdayStr) {
+          if (!chips.some(c => c.id === dateStr)) {
+            chips.push({
+              id: dateStr,
+              label: formatChipLabel(dateStr),
+            });
+          }
+        }
+      });
+    }
 
     return chips;
   }, [availableDates]);

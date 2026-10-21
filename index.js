@@ -72,7 +72,7 @@ const headlessNotificationListener = async ({ notification }) => {
 
   try {
     const notif = JSON.parse(notification);
-    const app = notif.app || 'unknown';
+    const app = notif.app || notif.packageName || 'unknown';
 
     // 1. Guardar Heartbeat (indica que el listener nativo y Headless están vivos)
     try {

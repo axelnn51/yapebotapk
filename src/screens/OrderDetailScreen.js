@@ -237,6 +237,32 @@ export default function OrderDetailScreen({ route, navigation }) {
         <InfoRow icon="create" value={`Modificado: ${order.date_modified || 'N/A'}`} />
       </View>
 
+      {/* Módulo CID Portal */}
+      <View style={styles.infoCard}>
+        <Text style={styles.infoTitle}>🔑 Activación CID (getcid.cdkeysperu.com)</Text>
+        <TouchableOpacity
+          style={styles.cidActionBtn}
+          activeOpacity={0.8}
+          onPress={() => {
+            navigation.navigate('GenerarCID', {
+              orderId: String(orderId),
+              email: order.customer?.email || '',
+              suggestedCredits: order.items?.reduce((acc, it) => acc + (parseInt(it.qty, 10) || 1), 0) || 1,
+            });
+          }}
+        >
+          <LinearGradient
+            colors={['#7c3aed', '#4f46e5']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.cidActionGradient}
+          >
+            <Ionicons name="key" size={20} color="#facc15" />
+            <Text style={styles.cidActionText}>Generar Créditos CID para #{orderId}</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+
       {/* Action Buttons */}
       {!processing && (
         <View style={styles.infoCard}>
@@ -440,4 +466,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#f97316', alignItems: 'center',
   },
   modalSaveText: { color: '#fff', fontWeight: '700', fontSize: FontSize.md },
+
+  cidActionBtn: {
+    borderRadius: BorderRadius.md,
+    overflow: 'hidden',
+    marginTop: Spacing.xs,
+  },
+  cidActionGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  cidActionText: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: FontSize.md,
+  },
 });

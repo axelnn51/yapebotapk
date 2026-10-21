@@ -13,6 +13,7 @@ import { openAutoStartSettings, openBatteryOptimizationSettings, openAppDetailsS
 import { sendHeartbeat, getHeartbeatStatus } from '../services/heartbeatService';
 import { parseBankNotification } from '../services/bankParser';
 import { logEvent, EVENT_TYPES } from '../services/eventLogger';
+import { saveLocalPayment } from '../services/paymentHistory';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
@@ -210,7 +211,7 @@ export default function SettingsScreen({ navigation }) {
       };
       const parsed = parseBankNotification(mockRaw);
 
-      if (parsed && parsed.isValid) {
+      if (parsed && (parsed.isPayment || parsed.isValid)) {
         // Registrar en el log de eventos
         await logEvent('Yape', 'Captura de prueba local ejecutada', `S/ ${parsed.amount} - Cód: ${parsed.securityCode}`, EVENT_TYPES.NOTIFICATION_RECEIVED);
         
@@ -227,15 +228,25 @@ export default function SettingsScreen({ navigation }) {
         const countStr = await AsyncStorage.getItem('@yape_notification_count');
         const nextCount = (parseInt(countStr || '0', 10) + 1);
         await AsyncStorage.setItem('@yape_notification_count', String(nextCount));
+
+        // Registrar en historial local de pagos para que figure en la pestaña Yapes
+        await saveLocalPayment(parsed, 'sent', 'Captura de prueba local exitosa');
         
         setNotifCount(nextCount);
         setLastNotif(notifSummary);
 
+        try {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } catch (hErr) {}
+
         Alert.alert(
           '✅ Test de Captura Exitoso',
-          `El motor procesó correctamente el formato de Yape:\n• Monto: S/ ${parsed.amount}\n• Cód. Seguridad: ${parsed.securityCode}\n• Remitente: ${parsed.senderName}\n\nEl contador local ha subido a ${nextCount}.`
+          `El motor procesó correctamente el formato de Yape:\n• Monto: S/ ${parsed.amount}\n• Cód. Seguridad: ${parsed.securityCode}\n• Remitente: ${parsed.senderName}\n\nSe ha guardado en tu pestaña de Yapes y el contador subió a ${nextCount}.`
         );
       } else {
+        try {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        } catch (hErr) {}
         Alert.alert('⚠️ Error en Parser', parsed?.reason || 'No se pudo interpretar el formato.');
       }
     } catch (e) {

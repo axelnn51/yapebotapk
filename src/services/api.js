@@ -100,13 +100,13 @@ export async function isConfigured() {
 // ============================================================
 const apiCache = new Map();
 const CACHE_TTL = {
-  '/dashboard': 20000,        // 20s — datos cambian poco
-  '/orders/pending': 10000,   // 10s — pedidos se actualizan
-  '/orders/all': 10000,       // 10s
+  '/dashboard': 30000,        // 30s — datos cambian poco
+  '/orders/pending': 20000,   // 20s — pedidos se actualizan
+  '/orders/all': 30000,       // 30s — optimizado para evitar rate limit en servidor
   '/reports/weekly': 60000,   // 60s — reportes cambian poco
   '/reports/daily': 30000,    // 30s
-  '/notifications': 15000,    // 15s
-  '/push-status': 5000,       // 5s
+  '/notifications': 20000,    // 20s
+  '/push-status': 10000,      // 10s
 };
 
 function getCachedResponse(endpoint) {

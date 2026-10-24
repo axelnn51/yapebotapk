@@ -19,3 +19,8 @@ APK VUELTO/extracted*/
 *.xapk
 avances/
 AVANCES/
+
+# Informes y reportes
+INFORME*.md
+INFORME_*.md
+avances/
